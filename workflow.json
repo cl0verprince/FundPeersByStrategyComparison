@@ -1,7 +1,7 @@
 {
   "steps": [
     {"name": "step0_setup", "status": "done"},
-    {"name": "step1_ingest", "status": "pending"},
+    {"name": "step1_ingest", "status": "done"},
     {"name": "step2_similarity", "status": "pending"},
     {"name": "step3_metrics", "status": "pending"},
     {"name": "step4_predict", "status": "pending"},

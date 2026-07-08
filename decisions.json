@@ -28,5 +28,15 @@
     "date": "2026-07-08",
     "decision": "Run the project as a step-wise-methodology build: a contract-first plan.md, one gated milestone at a time, each with its own design.md and a human approval gate before the next step starts.",
     "rationale": "Keeps each stage reviewable and reversible, and avoids docs drifting from code since decisions/workflow docs update in the same change as each step."
+  },
+  {
+    "date": "2026-07-09",
+    "decision": "Set the fund universe target to 1000 resolved funds, using an iterative-fill sampling strategy (shuffle the full complete-panel candidate pool, resolve ticker+Yahoo data one at a time until 1000 succeed) rather than a fixed pre-filter sample.",
+    "rationale": "A 20-fund pilot run showed ~45% of candidate series have no ticker mapping at all before Yahoo is even attempted; a fixed sample of exactly max_funds candidates would under-shoot the target after attrition. The complete 12-quarter panel has 9,445 candidate series, giving ample headroom."
+  },
+  {
+    "date": "2026-07-09",
+    "decision": "Corrected the US-equity flag to require BOTH yahoo_stock_position >= 0.80 (asset class) AND a holdings-based US-domiciled-equity share >= 0.70 (geography), instead of the asset-class signal alone.",
+    "rationale": "Empirically confirmed yfinance's stockPosition only measures stock-vs-bond allocation, not geography - international and emerging-market equity funds also show stockPosition near 1.0. Combining it with a value-weighted holdings check (ASSET_CAT='EC' + INVESTMENT_COUNTRY='US') fixed 87/90 misflagged international funds in testing; the 3 remaining exceptions trace to a documented, accepted N-PORT data limitation (fund-of-funds wrappers reporting their issuer's country, not their economic exposure)."
   }
 ]

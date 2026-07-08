@@ -47,11 +47,13 @@ def regenerate_docs() -> None:
     )
 
 
-def main() -> None:
+def main(pipeline=None) -> None:
+    """Run the pipeline. `pipeline` is injectable (e.g. stub steps in tests) -
+    defaults to the real, ordered step list."""
     cfg = load_config()
     seed_everything(cfg["seed"])
 
-    steps = build_pipeline(cfg)
+    steps = pipeline if pipeline is not None else build_pipeline(cfg)
     for label, run in tqdm(steps, desc="pipeline", unit="step"):
         run(cfg)
 

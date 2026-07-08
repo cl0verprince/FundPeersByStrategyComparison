@@ -5,7 +5,12 @@
       "2022q1", "2022q2", "2022q3", "2022q4",
       "2023q1", "2023q2", "2023q3", "2023q4",
       "2024q1", "2024q2", "2024q3", "2024q4"
-    ]
+    ],
+    "max_funds": 1000,
+    "equity_stock_position_min": 0.80,
+    "us_holdings_share_min": 0.70,
+    "yahoo_request_delay_seconds": 0.3,
+    "yahoo_max_retries": 3
   },
   "paths": {
     "raw": "data/raw",
