@@ -1,0 +1,32 @@
+[
+  {
+    "date": "2026-07-08",
+    "decision": "Use SEC bulk Form N-PORT Data Sets (quarterly ZIPs of tab-delimited files) as the primary data source.",
+    "rationale": "Verified against SEC primary sources: pre-parsed, joinable flat files covering fund identity, monthly returns, and holdings. Avoids scraping individual XML filings entirely."
+  },
+  {
+    "date": "2026-07-08",
+    "decision": "Identify the US equity fund universe using Yahoo Finance categories as a pre-filter, cross-checked against holdings-based inference (value-weighted ASSET_CAT='EC' + INVESTMENT_COUNTRY='US').",
+    "rationale": "N-PORT has no fund-level equity/strategy label, so it must be inferred from holdings. Yahoo categories (joined via SEC's official mutual-fund ticker map) give a fast, independent cross-check, but are treated as a heuristic since yfinance is an unofficial scraper."
+  },
+  {
+    "date": "2026-07-08",
+    "decision": "Build peer groups ourselves via cosine similarity + clustering over holdings-based strategy vectors, then validate the clusters against Yahoo fund categories (purity / adjusted Rand index).",
+    "rationale": "Yahoo categories could have been used directly as peer groups, but that would skip building real holdings-based similarity/clustering. Using them as a validator instead keeps the clustering work while still getting an external sanity check."
+  },
+  {
+    "date": "2026-07-08",
+    "decision": "Define 'underperform' as a fund's next-quarter total return falling below its cluster's median return, evaluated across multiple pooled quarterly prediction periods (not a single train/test split).",
+    "rationale": "N-PORT holdings snapshots are effectively quarterly (only the 3rd month of each quarter is historically public), but each filing reports all 3 monthly returns — this maps cleanly onto a quarter-over-quarter prediction setup with several periods pooled for a realistic time-based split."
+  },
+  {
+    "date": "2026-07-08",
+    "decision": "Use phi-4 (Q4_K_S) served locally by LM Studio for plain-English narration of results only (RAG-style, grounded in computed data) — not for training or fine-tuning.",
+    "rationale": "The quantized GGUF model cannot be trained, and the core data (fund holdings/returns) is numeric — a poor fit for LLM prediction. The LLM's strength here is explaining results already produced by classical ML, not producing the predictions itself."
+  },
+  {
+    "date": "2026-07-08",
+    "decision": "Run the project as a step-wise-methodology build: a contract-first plan.md, one gated milestone at a time, each with its own design.md and a human approval gate before the next step starts.",
+    "rationale": "Keeps each stage reviewable and reversible, and avoids docs drifting from code since decisions/workflow docs update in the same change as each step."
+  }
+]

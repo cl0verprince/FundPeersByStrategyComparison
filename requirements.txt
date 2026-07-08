@@ -1,0 +1,13 @@
+pandas==3.0.3
+pyarrow==24.0.0
+duckdb==1.5.4
+scikit-learn==1.9.0
+numpy==2.5.1
+requests==2.34.2
+yfinance==1.5.1
+matplotlib==3.11.0
+tqdm==4.68.4
+openai==2.44.0
+python-dotenv==1.2.2
+pytest==9.1.1
+jupyter==1.1.1

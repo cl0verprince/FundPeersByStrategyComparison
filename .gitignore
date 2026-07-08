@@ -1,0 +1,40 @@
+# === Secrets — never commit ===
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+service-account*.json
+*credentials*.json
+secrets.*
+
+# IDE
+.idea/
+.vscode/
+
+# Python virtual environment
+.venv/
+venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data & build artifacts
+data/raw/
+data/processed/
+*.log
+dist/
+build/
+out/

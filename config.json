@@ -1,0 +1,31 @@
+{
+  "seed": 42,
+  "data": {
+    "quarters": [
+      "2022q1", "2022q2", "2022q3", "2022q4",
+      "2023q1", "2023q2", "2023q3", "2023q4",
+      "2024q1", "2024q2", "2024q3", "2024q4"
+    ]
+  },
+  "paths": {
+    "raw": "data/raw",
+    "processed": "data/processed"
+  },
+  "similarity": {
+    "n_clusters": 15,
+    "top_n_peers": 10
+  },
+  "metrics": {
+    "risk_free_annual": 0.02
+  },
+  "model": {
+    "rf": {
+      "n_estimators": 300,
+      "max_depth": 8,
+      "min_samples_leaf": 10
+    }
+  },
+  "llm": {
+    "model_name": "phi-4"
+  }
+}
