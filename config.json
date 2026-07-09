@@ -14,11 +14,14 @@
   },
   "paths": {
     "raw": "data/raw",
-    "processed": "data/processed"
+    "processed": "data/processed",
+    "reports": "reports"
   },
   "similarity": {
     "n_clusters": 15,
-    "top_n_peers": 10
+    "top_n_peers": 10,
+    "embedding_model": "all-MiniLM-L6-v2",
+    "top_holdings_for_description": 25
   },
   "metrics": {
     "risk_free_annual": 0.02

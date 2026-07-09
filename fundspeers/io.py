@@ -18,6 +18,12 @@ def processed_dir(cfg: dict) -> Path:
     return p
 
 
+def reports_dir(cfg: dict) -> Path:
+    p = PROJECT_ROOT / cfg["paths"]["reports"]
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def save_table(df: pd.DataFrame, name: str, cfg: dict) -> Path:
     path = processed_dir(cfg) / f"{name}.parquet"
     df.to_parquet(path, index=False)
