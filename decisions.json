@@ -53,5 +53,10 @@
     "date": "2026-07-10",
     "decision": "Added a GitHub Actions workflow (.github/workflows/tests.yml) running the fast pytest suite on every push/PR to main. Confirmed no CI/CD existed previously (no .github/workflows directory, and 3 commits sat unpushed on origin before this).",
     "rationale": "The 10 unit/smoke tests are fast (~5s) and need no network access or secrets (verified by running them with the data/ directory temporarily removed, simulating a clean checkout), making them well-suited to CI. The full pipeline (step1 ingestion: ~15+ min, GBs of downloads, needs SEC_USER_AGENT and live external APIs) deliberately stays out of CI and is only run manually per gated step, per the step-wise-methodology approach used throughout this project."
+  },
+  {
+    "date": "2026-07-10",
+    "decision": "Fixed a real bug in compute_quarterly_returns: np.prod() on a pandas Series silently skips NaN via Series.prod(skipna=True), so a fund with one unparseable monthly return (2 funds affected, from step1's pd.to_numeric coercion) got a silently-wrong 2-of-3-month product for that quarter instead of a correctly-NaN result.",
+    "rationale": "Caught by cross-checking .describe() row counts between fund_metrics_overall (correctly NaN via .values, a numpy array) and fund_metrics_quarterly (incorrectly non-NaN) for the same 2 funds - the discrepancy revealed the inconsistency. Fixed by using .values in the quarterly calc too, with a regression test added."
   }
 ]
