@@ -74,12 +74,30 @@ def compute_cluster_relative_metrics(
     return merged
 
 
+def _concentration_word(dominant_category_share: float) -> str:
+    if dominant_category_share >= 0.70:
+        return "Concentrated"
+    if dominant_category_share >= 0.40:
+        return "Leaning"
+    return "Mixed"
+
+
 def compute_cluster_definitions(
     fund_clusters: pd.DataFrame, funds: pd.DataFrame, fund_metrics_overall: pd.DataFrame
 ) -> pd.DataFrame:
     """One row per (quarter, cluster_id): a deterministic, rule-based description of that
     cluster's membership - not an LLM-generated one (step5 narrates individual funds; this
-    is a hard, reproducible definition computed straight from already-verified data)."""
+    is a hard, reproducible definition computed straight from already-verified data).
+
+    `short_title` is allocation-only by design: clusters are formed from holdings/allocation
+    similarity (step2), not performance, so the identifying name is built purely from
+    `dominant_category_share` (how homogeneous the cluster is) and `dominant_category` -
+    deliberately excludes avg_sharpe/avg_volatility, which are outcomes correlated with a
+    cluster's composition, not what defines it. Baking a performance stat into the name would
+    also collide with "underperform," which already has a specific, different meaning
+    elsewhere in this pipeline (a fund's return relative to its OWN cluster's median) - a
+    cluster can't be described as "underperforming" relative to itself. The longer `title`
+    still reports avg_volatility/avg_sharpe separately, as descriptive stats, not identity."""
     category_by_fund_quarter = funds[["series_id", "quarter", "yahoo_category"]].drop_duplicates()
     df = fund_clusters.merge(category_by_fund_quarter, on=["series_id", "quarter"], how="left")
     df["tier"] = df["yahoo_category"].map(category_tier)
@@ -98,12 +116,13 @@ def compute_cluster_definitions(
             f"({member_count} funds), avg volatility {avg_volatility:.0%}, "
             f"avg Sharpe {avg_sharpe:.2f}"
         )
+        short_title = f"{_concentration_word(dominant_category_share)} {dominant_category}"
         rows.append({
             "quarter": quarter, "cluster_id": cluster_id, "member_count": member_count,
             "dominant_category": dominant_category,
             "dominant_category_share": dominant_category_share,
             "dominant_tier": dominant_tier, "avg_volatility": avg_volatility,
-            "avg_sharpe": avg_sharpe, "title": title,
+            "avg_sharpe": avg_sharpe, "title": title, "short_title": short_title,
         })
     return pd.DataFrame(rows)
 

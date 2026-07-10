@@ -4,6 +4,7 @@ import pandas as pd
 from pytest import approx
 
 from steps.step3_metrics.metrics import (
+    _concentration_word,
     compute_cluster_definitions,
     compute_cluster_relative_metrics,
     compute_overall_metrics,
@@ -111,3 +112,34 @@ def test_compute_cluster_definitions_picks_dominant_category_and_averages_metric
     assert row["avg_sharpe"] == approx((0.5 + 0.3 + 0.4) / 3)
     assert "Small tilt" in row["title"]
     assert "Small Value" in row["title"]
+    assert row["short_title"] == "Leaning Small Value"  # share 2/3 ~ 0.67, in the 0.40-0.70 band
+
+
+def test_concentration_word_thresholds():
+    assert _concentration_word(0.86) == "Concentrated"
+    assert _concentration_word(0.70) == "Concentrated"
+    assert _concentration_word(0.69) == "Leaning"
+    assert _concentration_word(0.40) == "Leaning"
+    assert _concentration_word(0.39) == "Mixed"
+    assert _concentration_word(0.0) == "Mixed"
+
+
+def test_short_title_never_includes_a_performance_word():
+    # Clusters are formed from holdings/allocation similarity, not performance - short_title
+    # must never mention Sharpe, volatility, or "underperform" (which already has a specific,
+    # different, cluster-relative meaning elsewhere in this pipeline).
+    fund_clusters = pd.DataFrame([
+        {"series_id": "S1", "quarter": "2024q1", "cluster_id": 0},
+    ])
+    funds = pd.DataFrame([
+        {"series_id": "S1", "quarter": "2024q1", "yahoo_category": "Large Blend"},
+    ])
+    fund_metrics_overall = pd.DataFrame([
+        {"series_id": "S1", "annualized_volatility": 0.20, "sharpe_ratio": -1.5,
+         "cumulative_return": -0.3, "max_drawdown": -0.5},
+    ])
+    result = compute_cluster_definitions(fund_clusters, funds, fund_metrics_overall)
+    short_title = result.iloc[0]["short_title"]
+    for forbidden in ("sharpe", "volatility", "underperform"):
+        assert forbidden not in short_title.lower()
+    assert short_title == "Concentrated Large Blend"

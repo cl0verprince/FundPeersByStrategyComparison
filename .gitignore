@@ -39,3 +39,9 @@ models/
 dist/
 build/
 out/
+
+# Personal reference docs (not part of the pipeline)
+DUCKDB_GUIDE.md
+
+# Downloaded third-party tools (not part of the codebase)
+duckdb_cli-windows-amd64/

@@ -17,6 +17,26 @@ Also prompted a small refactor: `category_tier()` was duplicated in step2 and st
 it a third time here was the trigger to extract it into a shared `fundspeers/category.py`
 (the "rule of three" for duplication) rather than copy-pasting a third time.
 
+## Follow-up (2026-07-11): `short_title`, allocation-only by design
+The first version of `title` mixed two different kinds of information: what the cluster *is*
+(dominant category) and what it *did* (avg volatility/Sharpe). Two real problems, both caught
+by the user before implementation:
+1. **Performance doesn't belong in a cluster's identifying name.** Clusters are formed from
+   holdings/allocation similarity (step2's embeddings), not performance - a cluster's average
+   Sharpe is an outcome correlated with its composition, not what defines it. Baking it into
+   the name implies the cluster was formed *because of* its performance, which isn't true.
+2. **"Underperforming" collides with an existing, different meaning.** This pipeline already
+   uses "underperform" to mean *relative to a fund's own cluster median* (step4's label). A
+   cluster can't underperform itself - reusing that word for an absolute Sharpe band would be
+   semantically confused.
+
+Fixed by adding `short_title` = `f"{concentration_word} {dominant_category}"` -
+**allocation-only**: `_concentration_word(dominant_category_share)` returns `"Concentrated"`
+(>=70%), `"Leaning"` (40-70%), or `"Mixed"` (<40%). No performance term at all. Real 2024q4
+output: `"Concentrated Real Estate"`, `"Leaning Large Blend"`, `"Mixed Financial"`,
+`"Concentrated Energy Limited Partnership"` - 2-4 words typically. The longer `title` still
+reports avg_volatility/avg_sharpe as descriptive stats, just not folded into the identity.
+
 ## Purpose (traces to Required Output)
 From `monthly_returns`, compute standard performance/risk metrics for every US-equity fund,
 and each fund's return relative to its own quarter's cluster (from step2) — the features step4's
