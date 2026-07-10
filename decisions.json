@@ -58,5 +58,10 @@
     "date": "2026-07-10",
     "decision": "Fixed a real bug in compute_quarterly_returns: np.prod() on a pandas Series silently skips NaN via Series.prod(skipna=True), so a fund with one unparseable monthly return (2 funds affected, from step1's pd.to_numeric coercion) got a silently-wrong 2-of-3-month product for that quarter instead of a correctly-NaN result.",
     "rationale": "Caught by cross-checking .describe() row counts between fund_metrics_overall (correctly NaN via .values, a numpy array) and fund_metrics_quarterly (incorrectly non-NaN) for the same 2 funds - the discrepancy revealed the inconsistency. Fixed by using .values in the quarterly calc too, with a regression test added."
+  },
+  {
+    "date": "2026-07-10",
+    "decision": "Migrated the persistence layer from standalone .parquet files to a single embedded SQL database (DuckDB, data/processed/fundspeers.duckdb), on request. PostgreSQL was considered and rejected in favor of DuckDB.",
+    "rationale": "PostgreSQL needs a running server process and connection credentials - real new infrastructure this project doesn't otherwise have. DuckDB is serverless (a single file, no credentials) and gives the same real-SQL experience (joins, aggregates, window functions, any DuckDB client). Migrated existing parquet output directly into the new file (no recompute needed) and confirmed every step's code needed zero changes, validating the fundspeers.io abstraction built in step0."
   }
 ]

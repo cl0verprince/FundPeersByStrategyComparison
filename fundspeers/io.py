@@ -1,9 +1,18 @@
-"""Path resolution and parquet table read/write helpers, driven by config."""
+"""Path resolution and SQL table read/write helpers, driven by config.
+
+Tables live in one DuckDB file (data/processed/fundspeers.duckdb) - an embedded, serverless
+SQL database (no server process, no credentials). Open it directly with any DuckDB client
+(the `duckdb` CLI, DBeaver, etc.) to run ad-hoc SQL against the pipeline's output.
+"""
+import re
 from pathlib import Path
 
+import duckdb
 import pandas as pd
 
 from fundspeers.config import PROJECT_ROOT
+
+_VALID_TABLE_NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 def raw_dir(cfg: dict) -> Path:
@@ -24,16 +33,35 @@ def reports_dir(cfg: dict) -> Path:
     return p
 
 
-def save_table(df: pd.DataFrame, name: str, cfg: dict) -> Path:
-    path = processed_dir(cfg) / f"{name}.parquet"
-    df.to_parquet(path, index=False)
-    return path
+def db_path(cfg: dict) -> Path:
+    return processed_dir(cfg) / "fundspeers.duckdb"
+
+
+def _validate_table_name(name: str) -> None:
+    # Table names are always internal string literals (e.g. "funds", "holdings"), never
+    # user input - this is defensive, not a real injection risk, but cheap to check.
+    if not _VALID_TABLE_NAME.match(name):
+        raise ValueError(f"invalid table name: {name!r}")
+
+
+def save_table(df: pd.DataFrame, name: str, cfg: dict) -> str:
+    _validate_table_name(name)
+    with duckdb.connect(str(db_path(cfg))) as con:
+        con.register("_df_to_save", df)
+        con.execute(f"CREATE OR REPLACE TABLE {name} AS SELECT * FROM _df_to_save")
+    return name
 
 
 def load_table(name: str, cfg: dict) -> pd.DataFrame:
-    path = processed_dir(cfg) / f"{name}.parquet"
-    return pd.read_parquet(path)
+    _validate_table_name(name)
+    with duckdb.connect(str(db_path(cfg))) as con:
+        return con.execute(f"SELECT * FROM {name}").df()
 
 
 def table_exists(name: str, cfg: dict) -> bool:
-    return (processed_dir(cfg) / f"{name}.parquet").exists()
+    _validate_table_name(name)
+    with duckdb.connect(str(db_path(cfg))) as con:
+        row = con.execute(
+            "SELECT count(*) FROM information_schema.tables WHERE table_name = ?", [name]
+        ).fetchone()
+        return row[0] > 0

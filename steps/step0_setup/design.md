@@ -1,5 +1,17 @@
 # step0_setup — design
 
+## Post-hoc update (2026-07-10): persistence layer moved from parquet to DuckDB
+`fundspeers/io.py`'s `save_table`/`load_table`/`table_exists` originally wrote/read standalone
+`.parquet` files (one per table) under `data/processed/`. On request, this was migrated to a
+single embedded SQL database file, `data/processed/fundspeers.duckdb` (DuckDB - serverless, no
+credentials, opens with any DuckDB client for ad-hoc SQL). PostgreSQL was considered and rejected:
+it needs a running server process and connection credentials, real new infrastructure this
+project doesn't otherwise have, whereas DuckDB is a drop-in swap behind the same function
+signatures - **no step's code changed at all**, confirming the io.py abstraction from this step
+was designed correctly. Existing parquet output was migrated into the new file directly (DuckDB
+reads parquet natively) rather than recomputed; the old `.parquet` files were then deleted
+(gitignored, fully derived, verified identical row counts/schemas before deletion).
+
 ## Purpose (traces to Required Output)
 Stand up the project skeleton once so every later step plugs in and the whole pipeline is
 reproducible from **one command**. This step produces no analysis; it delivers the deterministic
