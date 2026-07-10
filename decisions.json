@@ -93,5 +93,20 @@
     "date": "2026-07-11",
     "decision": "Added cluster_definitions.short_title, a compact allocation-only bucket name (e.g. \"Leaning Large Blend\", \"Concentrated Energy Limited Partnership\") - built from dominant_category_share and dominant_category only, deliberately excluding any performance stat (avg_sharpe, avg_volatility).",
     "rationale": "User caught two real problems with an earlier draft that included a performance word: (1) clusters are formed from holdings/allocation similarity, not performance, so baking a performance stat into the identifying name implies the cluster was formed because of its performance, which isn't true; (2) a performance band worded as \"Underperforming\" collides with this pipeline's existing, different meaning of underperform (relative to a fund's own cluster median, from step4) - a cluster can't underperform itself. The longer title field still reports avg_volatility/avg_sharpe as descriptive stats, just not folded into the cluster's identity."
+  },
+  {
+    "date": "2026-07-11",
+    "decision": "Extracted concentration_word/compute_dominant_category_info into shared fundspeers/category.py (used by both step2's cluster-map legend and step3's cluster_definitions table), and replaced the cluster map's numeric cluster_id colorbar with a proper legend showing each cluster's short_title.",
+    "rationale": "short_title only needs dominant_category/dominant_category_share, not the metrics-dependent fields step3 also computes, so it can be (and now is) computed directly in step2 before step3 ever runs - avoiding a third near-duplicate of the same logic. Comparing the original and OOS cluster maps with real names visible (not just colors) made a genuine structural consistency check possible: the separated left-island cluster in both plots is dominated by Target-Date allocation funds, even though the arbitrary cluster_id differs between the two independent KMeans fits."
+  },
+  {
+    "date": "2026-07-11",
+    "decision": "Confirmed the original-vs-OOS cluster label mismatch (different colors/ids for the same visual island) is expected, not a bug: both similarity.py's KMeans and PCA are freshly re-fit on each run's own data, never reusing the other run's fitted centroids/transform - and the two runs use fully disjoint funds anyway, so ARI/AMI between them isn't even computable.",
+    "rationale": "User asked directly whether OOS was re-clustered independently or scored against the existing fitted model; verified from the code (KMeans(...).fit_predict(...) inside the per-quarter loop, called fresh every run()) rather than assumed. The right structural check is each run's own purity/ARI against Yahoo categories (already computed), not cross-run label agreement."
+  },
+  {
+    "date": "2026-07-11",
+    "decision": "Promoted the retrained-on-combined model (754 funds, test AUC=0.725) to be the new official models/random_forest_model.joblib, replacing the original 363-fund model - backed up to random_forest_model_original_363funds.joblib rather than silently overwritten, and regenerated fund_predictions/model_feature_importances so the persisted tables stay consistent with whichever model is actually saved as official.",
+    "rationale": "User explicitly opted in after being told the retrained model was never persisted before (only its AUC was reported) - promoting is a deliberate, explicit action, not an automatic side effect of running step6's evaluation."
   }
 ]

@@ -21,7 +21,7 @@ from sklearn.metrics import adjusted_rand_score
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 
-from fundspeers.category import category_tier
+from fundspeers.category import category_tier, compute_dominant_category_info
 from fundspeers.io import load_table, reports_dir, save_table
 
 log = logging.getLogger(__name__)
@@ -97,15 +97,24 @@ def get_peers(series_id: str, quarter: str, cfg: dict) -> pd.DataFrame:
 
 
 def _plot_cluster_map(vectors: pd.DataFrame, cluster_labels: pd.Series, quarter: str,
-                       seed: int, cfg: dict, table_suffix: str = "") -> None:
+                       seed: int, cfg: dict, table_suffix: str = "",
+                       cluster_names: dict = None) -> None:
+    """`cluster_names` (cluster_id -> short_title, e.g. "Leaning Large Blend") replaces a
+    plain numeric cluster_id colorbar with a readable legend - one scatter series per
+    cluster so matplotlib's legend can show the allocation-based name, not just an arbitrary
+    integer. Falls back to "cluster N" if no names are given."""
     pca = PCA(n_components=2, random_state=seed)
     coords = pca.fit_transform(vectors.values)
-    fig, ax = plt.subplots(figsize=(8, 6))
-    scatter = ax.scatter(coords[:, 0], coords[:, 1], c=cluster_labels.values, cmap="tab20", s=25)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    cmap = plt.get_cmap("tab20")
+    for i, cluster_id in enumerate(sorted(cluster_labels.unique())):
+        mask = (cluster_labels.values == cluster_id)
+        label = cluster_names.get(cluster_id, f"cluster {cluster_id}") if cluster_names else f"cluster {cluster_id}"
+        ax.scatter(coords[mask, 0], coords[mask, 1], color=cmap(i % 20), s=25, label=label)
     ax.set_title(f"Fund strategy clusters ({quarter}{table_suffix}) - PCA projection of holdings embeddings")
     ax.set_xlabel("PC1")
     ax.set_ylabel("PC2")
-    fig.colorbar(scatter, ax=ax, label="cluster_id")
+    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=8, title="cluster (allocation)")
     out_path = reports_dir(cfg) / f"cluster_map_{quarter}{table_suffix}.png"
     fig.savefig(out_path, dpi=120, bbox_inches="tight")
     plt.close(fig)
@@ -190,7 +199,12 @@ def run(cfg: dict, table_suffix: str = "") -> None:
     save_table(pd.DataFrame(peer_rows), f"fund_peers{table_suffix}", cfg)
     save_table(pd.DataFrame(validation_rows), f"cluster_validation{table_suffix}", cfg)
 
-    _plot_cluster_map(latest_vectors, latest_labels, quarters[-1], seed, cfg, table_suffix)
+    latest_cluster_assignments = pd.DataFrame({
+        "series_id": latest_labels.index, "cluster_id": latest_labels.values,
+    })
+    dominant_info = compute_dominant_category_info(latest_cluster_assignments, category_by_series)
+    cluster_names = dict(zip(dominant_info["cluster_id"], dominant_info["short_title"]))
+    _plot_cluster_map(latest_vectors, latest_labels, quarters[-1], seed, cfg, table_suffix, cluster_names)
 
     mean_purity = pd.DataFrame(validation_rows)["purity"].mean()
     mean_ari = pd.DataFrame(validation_rows)["adjusted_rand_index"].mean()

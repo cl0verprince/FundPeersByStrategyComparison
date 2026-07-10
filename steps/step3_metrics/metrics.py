@@ -8,7 +8,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from fundspeers.category import category_tier
+from fundspeers.category import category_tier, compute_dominant_category_info
 from fundspeers.io import load_table, save_table
 
 log = logging.getLogger(__name__)
@@ -74,14 +74,6 @@ def compute_cluster_relative_metrics(
     return merged
 
 
-def _concentration_word(dominant_category_share: float) -> str:
-    if dominant_category_share >= 0.70:
-        return "Concentrated"
-    if dominant_category_share >= 0.40:
-        return "Leaning"
-    return "Mixed"
-
-
 def compute_cluster_definitions(
     fund_clusters: pd.DataFrame, funds: pd.DataFrame, fund_metrics_overall: pd.DataFrame
 ) -> pd.DataFrame:
@@ -89,41 +81,47 @@ def compute_cluster_definitions(
     cluster's membership - not an LLM-generated one (step5 narrates individual funds; this
     is a hard, reproducible definition computed straight from already-verified data).
 
-    `short_title` is allocation-only by design: clusters are formed from holdings/allocation
-    similarity (step2), not performance, so the identifying name is built purely from
-    `dominant_category_share` (how homogeneous the cluster is) and `dominant_category` -
-    deliberately excludes avg_sharpe/avg_volatility, which are outcomes correlated with a
-    cluster's composition, not what defines it. Baking a performance stat into the name would
-    also collide with "underperform," which already has a specific, different meaning
-    elsewhere in this pipeline (a fund's return relative to its OWN cluster's median) - a
-    cluster can't be described as "underperforming" relative to itself. The longer `title`
-    still reports avg_volatility/avg_sharpe separately, as descriptive stats, not identity."""
-    category_by_fund_quarter = funds[["series_id", "quarter", "yahoo_category"]].drop_duplicates()
-    df = fund_clusters.merge(category_by_fund_quarter, on=["series_id", "quarter"], how="left")
-    df["tier"] = df["yahoo_category"].map(category_tier)
-    df = df.merge(fund_metrics_overall, on="series_id", how="left")
+    `short_title` (from `fundspeers.category.compute_dominant_category_info`, shared with
+    step2's cluster-map legend) is allocation-only by design: clusters are formed from
+    holdings/allocation similarity (step2), not performance, so the identifying name is built
+    purely from `dominant_category_share` (how homogeneous the cluster is) and
+    `dominant_category` - deliberately excludes avg_sharpe/avg_volatility, which are outcomes
+    correlated with a cluster's composition, not what defines it. Baking a performance stat
+    into the name would also collide with "underperform," which already has a specific,
+    different meaning elsewhere in this pipeline (a fund's return relative to its OWN
+    cluster's median) - a cluster can't be described as "underperforming" relative to itself.
+    The longer `title` still reports avg_volatility/avg_sharpe separately, as descriptive
+    stats, not identity."""
+    category_by_series = funds.drop_duplicates("series_id").set_index("series_id")["yahoo_category"]
+    metrics_by_series = fund_metrics_overall.set_index("series_id")
 
     rows = []
-    for (quarter, cluster_id), group in df.groupby(["quarter", "cluster_id"]):
-        member_count = len(group)
-        dominant_category = group["yahoo_category"].mode().iloc[0]
-        dominant_category_share = (group["yahoo_category"] == dominant_category).mean()
-        dominant_tier = group["tier"].mode().iloc[0]
-        avg_volatility = group["annualized_volatility"].mean()
-        avg_sharpe = group["sharpe_ratio"].mean()
-        title = (
-            f"{dominant_tier} tilt: {dominant_category_share:.0%} {dominant_category} "
-            f"({member_count} funds), avg volatility {avg_volatility:.0%}, "
-            f"avg Sharpe {avg_sharpe:.2f}"
-        )
-        short_title = f"{_concentration_word(dominant_category_share)} {dominant_category}"
-        rows.append({
-            "quarter": quarter, "cluster_id": cluster_id, "member_count": member_count,
-            "dominant_category": dominant_category,
-            "dominant_category_share": dominant_category_share,
-            "dominant_tier": dominant_tier, "avg_volatility": avg_volatility,
-            "avg_sharpe": avg_sharpe, "title": title, "short_title": short_title,
-        })
+    for quarter, quarter_clusters in fund_clusters.groupby("quarter"):
+        dominant_info = compute_dominant_category_info(
+            quarter_clusters[["series_id", "cluster_id"]], category_by_series
+        ).set_index("cluster_id")
+
+        merged = quarter_clusters.merge(metrics_by_series, on="series_id", how="left")
+        merged["tier"] = merged["series_id"].map(category_by_series).map(category_tier)
+
+        for cluster_id, group in merged.groupby("cluster_id"):
+            info = dominant_info.loc[cluster_id]
+            member_count = len(group)
+            dominant_tier = group["tier"].mode().iloc[0]
+            avg_volatility = group["annualized_volatility"].mean()
+            avg_sharpe = group["sharpe_ratio"].mean()
+            title = (
+                f"{dominant_tier} tilt: {info['dominant_category_share']:.0%} "
+                f"{info['dominant_category']} ({member_count} funds), "
+                f"avg volatility {avg_volatility:.0%}, avg Sharpe {avg_sharpe:.2f}"
+            )
+            rows.append({
+                "quarter": quarter, "cluster_id": cluster_id, "member_count": member_count,
+                "dominant_category": info["dominant_category"],
+                "dominant_category_share": info["dominant_category_share"],
+                "dominant_tier": dominant_tier, "avg_volatility": avg_volatility,
+                "avg_sharpe": avg_sharpe, "title": title, "short_title": info["short_title"],
+            })
     return pd.DataFrame(rows)
 
 

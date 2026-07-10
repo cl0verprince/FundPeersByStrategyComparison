@@ -5,12 +5,13 @@ Two evaluations, answering two different questions (see design.md):
 2. A model RETRAINED on the combined original + new funds - does more data help?
 """
 import logging
+import shutil
 
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 
-from fundspeers.io import load_model, load_table
+from fundspeers.io import load_model, load_table, models_dir, save_model, save_table
 from steps.step4_predict.predict import assemble_panel, compute_trailing_features, time_based_split
 
 log = logging.getLogger(__name__)
@@ -60,10 +61,10 @@ def evaluate_frozen_model_on_oos(cfg: dict) -> dict:
     return {"auc": auc, "n": len(oos_panel)}
 
 
-def evaluate_retrained_on_combined(cfg: dict) -> dict:
-    """A different question: does pooling in the new funds and retraining from scratch
-    improve on the original model? Uses the same time-based split logic as step4, now over
-    the combined (original + OOS) fund set."""
+def fit_retrained_on_combined(cfg: dict) -> dict:
+    """Assemble the combined (original + OOS) panel, split, and fit a fresh RandomForest -
+    the shared work behind both evaluating the retrained model and (optionally) promoting
+    it to be the new official model."""
     original_panel, quarters_ordered = build_panel_for("", cfg)
     oos_panel, oos_quarters = build_panel_for("_oos", cfg)
     if quarters_ordered != oos_quarters:
@@ -98,11 +99,64 @@ def evaluate_retrained_on_combined(cfg: dict) -> dict:
         min_samples_leaf=cfg["model"]["rf"]["min_samples_leaf"],
         random_state=cfg["seed"],
     ).fit(x_train, y_train)
-    auc = roc_auc_score(y_test, rf.predict_proba(x_test)[:, 1])
     n_funds = pd.concat([original_panel["series_id"], oos_panel["series_id"]]).nunique()
-    log.info(f"retrained on combined {n_funds} funds ({len(train)} train, {len(test)} test "
-             f"fund-quarter rows): AUC={auc:.3f}")
-    return {"auc": auc, "n_train": len(train), "n_test": len(test)}
+    return {
+        "model": rf, "feature_cols": feature_cols, "train": train, "test": test,
+        "x_train": x_train, "y_train": y_train, "x_test": x_test, "y_test": y_test,
+        "n_funds": n_funds,
+    }
+
+
+def evaluate_retrained_on_combined(cfg: dict) -> dict:
+    """A different question from the frozen-model test: does pooling in the new funds and
+    retraining from scratch improve on the original model? Uses the same time-based split
+    logic as step4, now over the combined (original + OOS) fund set. Does NOT persist
+    anything - see promote_retrained_model() for that, a separate, deliberate action."""
+    fitted = fit_retrained_on_combined(cfg)
+    auc = roc_auc_score(fitted["y_test"], fitted["model"].predict_proba(fitted["x_test"])[:, 1])
+    log.info(f"retrained on combined {fitted['n_funds']} funds ({len(fitted['train'])} train, "
+             f"{len(fitted['test'])} test fund-quarter rows): AUC={auc:.3f}")
+    return {"auc": auc, "n_train": len(fitted["train"]), "n_test": len(fitted["test"])}
+
+
+def promote_retrained_model(cfg: dict) -> dict:
+    """Make the combined-data retrained model the new official one - backs up the previous
+    model.joblib (not silently overwritten) and regenerates fund_predictions/
+    model_feature_importances so the persisted tables stay consistent with whatever model
+    is actually saved as official. A deliberate, explicit action - never called automatically
+    from run(), since promoting is a real decision each time, not a side effect of evaluating."""
+    fitted = fit_retrained_on_combined(cfg)
+    rf, feature_cols = fitted["model"], fitted["feature_cols"]
+    train, test = fitted["train"], fitted["test"]
+    x_train, x_test = fitted["x_train"], fitted["x_test"]
+
+    models_path = models_dir(cfg)
+    old_model_path = models_path / "random_forest_model.joblib"
+    if old_model_path.exists():
+        backup_path = models_path / "random_forest_model_original_363funds.joblib"
+        shutil.copy2(old_model_path, backup_path)
+        log.info(f"backed up previous model to {backup_path}")
+
+    save_model({"model": rf, "feature_cols": feature_cols}, "random_forest_model", cfg)
+
+    predictions = pd.concat([
+        train.assign(split="train", predicted_probability=rf.predict_proba(x_train)[:, 1]),
+        test.assign(split="test", predicted_probability=rf.predict_proba(x_test)[:, 1]),
+    ])[["series_id", "quarter", "predicted_probability", "underperform_next_quarter", "split"]].rename(
+        columns={"underperform_next_quarter": "actual_label"}
+    )
+    importances = pd.DataFrame({
+        "feature": feature_cols, "importance": rf.feature_importances_,
+    }).sort_values("importance", ascending=False)
+
+    save_table(predictions, "fund_predictions", cfg)
+    save_table(importances, "model_feature_importances", cfg)
+
+    auc = roc_auc_score(fitted["y_test"], rf.predict_proba(x_test)[:, 1])
+    log.info(f"PROMOTED: random_forest_model.joblib now trained on {fitted['n_funds']} funds "
+             f"(was 363), test AUC={auc:.3f} (was 0.710). fund_predictions "
+             f"({len(predictions)} rows) and model_feature_importances regenerated to match.")
+    return {"auc": auc, "n_funds": fitted["n_funds"]}
 
 
 def run(cfg: dict) -> None:

@@ -71,6 +71,35 @@ Same seed reused for the OOS sampling (shuffle order identical, only the exclusi
 Retraining uses the same seeded `RandomForestClassifier`/`DecisionTreeClassifier` construction
 as step4.
 
+## Follow-up (2026-07-11): OOS clustering is an independent re-fit, and the promoted model
+Two clarifications requested after reviewing the original vs. OOS cluster-map PNGs:
+
+**Cluster colors/labels don't match between the two maps - is that a bug?** No. Confirmed
+directly from the code (`similarity.py`'s per-quarter loop): `KMeans(...).fit_predict(...)`
+and `PCA(...).fit_transform(...)` both run as a **fresh, independent fit** every time `run()`
+is called - the OOS run creates its own new `KMeans`/`PCA` instances on the OOS embeddings,
+never reusing the original run's fitted centroids/transform. This is the same label-switching
+behavior step2's design already documents *across quarters* (`cluster_id=3` in one quarter has
+no relationship to `cluster_id=3` in another), just extended *across runs*. Since the two runs
+also use fully disjoint fund sets, ARI/AMI between the two clusterings isn't even computable
+(no shared population to compare labels on) - the right structural check is each run's *own*
+validation quality (purity/ARI vs. Yahoo categories, both reported below), not cross-run label
+agreement. With `short_title` now on the cluster-map legend, a real structural consistency
+check *is* visible: the separated left-island cluster in both plots is dominated by Target-Date
+allocation funds, even though the numeric `cluster_id` differs between runs.
+
+**Was the retrained-on-combined model persisted?** Originally no - `evaluate_retrained_on_combined`
+only returned an AUC, the fitted model was discarded after computing it. On request, added
+`promote_retrained_model()`: refits on the combined panel (via the shared `fit_retrained_on_combined`
+helper), backs up the previous `random_forest_model.joblib` to
+`random_forest_model_original_363funds.joblib` (not silently overwritten), saves the new model
+as the official one, and **regenerates `fund_predictions`/`model_feature_importances`** so the
+persisted tables stay consistent with whichever model is actually saved as official - promoting
+just the raw model file while leaving stale predictions behind would have left the database
+internally inconsistent. This is a deliberate, explicit action (not called from `run()`
+automatically) - confirmed with the user before executing. After promotion: 754 funds, test
+AUC=0.725, `fund_predictions` regenerated to 8266 rows (6005 train + 2261 test).
+
 ## UAT (acceptance for this step) - all confirmed on real data
 - OOS fund set confirmed fully disjoint: 1000 original + 1000 new series, **zero overlap**.
 - OOS panel completeness matched the original quality bar exactly: 391 equity funds

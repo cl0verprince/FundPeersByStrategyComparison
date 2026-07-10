@@ -4,7 +4,6 @@ import pandas as pd
 from pytest import approx
 
 from steps.step3_metrics.metrics import (
-    _concentration_word,
     compute_cluster_definitions,
     compute_cluster_relative_metrics,
     compute_overall_metrics,
@@ -113,15 +112,6 @@ def test_compute_cluster_definitions_picks_dominant_category_and_averages_metric
     assert "Small tilt" in row["title"]
     assert "Small Value" in row["title"]
     assert row["short_title"] == "Leaning Small Value"  # share 2/3 ~ 0.67, in the 0.40-0.70 band
-
-
-def test_concentration_word_thresholds():
-    assert _concentration_word(0.86) == "Concentrated"
-    assert _concentration_word(0.70) == "Concentrated"
-    assert _concentration_word(0.69) == "Leaning"
-    assert _concentration_word(0.40) == "Leaning"
-    assert _concentration_word(0.39) == "Mixed"
-    assert _concentration_word(0.0) == "Mixed"
 
 
 def test_short_title_never_includes_a_performance_word():

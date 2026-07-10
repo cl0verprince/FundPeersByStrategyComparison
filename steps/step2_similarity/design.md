@@ -1,5 +1,19 @@
 # step2_similarity — design
 
+## Follow-up (2026-07-11): cluster map legend using `short_title`
+The PCA cluster-map PNG originally used a plain numeric `cluster_id` colorbar - not
+informative on its own (step2's cluster ids are arbitrary per-quarter/per-run labels, per the
+KMeans note below). `_plot_cluster_map` now plots one scatter series per cluster, labeled with
+its `short_title` (e.g. "Leaning Large Blend", "Concentrated Real Estate") in a proper legend.
+`short_title` only needs `dominant_category`/`dominant_category_share` - not the
+metrics-dependent fields step3's `cluster_definitions` also carries - so
+`fundspeers.category.compute_dominant_category_info` (shared with step3) is called directly
+in step2's `run()`, before step3 ever runs. Concretely useful in practice: comparing the
+original and out-of-sample cluster maps (step6), the legend makes it visible that the same
+*type* of fund (Target-Date allocation funds) forms the separated left island in both plots,
+even though the arbitrary `cluster_id` numbers differ between the two independent runs -
+exactly the kind of structural consistency check that's otherwise invisible from color alone.
+
 ## Purpose (traces to Required Output)
 For the US-equity fund universe built in step1, build strategy vectors from actual portfolio
 overlap, compute cosine similarity, cluster into peer groups per quarter, and validate the
