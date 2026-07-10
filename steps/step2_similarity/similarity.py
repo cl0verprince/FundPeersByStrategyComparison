@@ -21,6 +21,7 @@ from sklearn.metrics import adjusted_rand_score
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 
+from fundspeers.category import category_tier
 from fundspeers.io import load_table, reports_dir, save_table
 
 log = logging.getLogger(__name__)
@@ -196,26 +197,12 @@ def run(cfg: dict) -> None:
     _log_validation_by_category_tier(cluster_rows, category_by_series)
 
 
-_CATEGORY_TIERS = {
-    "Large": ("Large Blend", "Large Value", "Large Growth"),
-    "Mid": ("Mid-Cap Blend", "Mid-Cap Value", "Mid-Cap Growth"),
-    "Small": ("Small Blend", "Small Value", "Small Growth"),
-}
-
-
-def _category_tier(category: str) -> str:
-    for tier, names in _CATEGORY_TIERS.items():
-        if category in names:
-            return tier
-    return "Sector/Other"
-
-
 def _log_validation_by_category_tier(cluster_rows: list, category_by_series: pd.Series) -> None:
     """Purity/ARI pooled across all quarters, broken down by broad market-cap tier - so a
     strong overall average can't hide segments the method serves less well."""
     df = pd.DataFrame(cluster_rows)
     df["category"] = df["series_id"].map(category_by_series).fillna("Unknown")
-    df["tier"] = df["category"].map(_category_tier)
+    df["tier"] = df["category"].map(category_tier)
     for tier, group in df.groupby("tier"):
         purity = compute_purity(group["cluster_id"], group["category"])
         ari = adjusted_rand_score(group["category"].values, group["cluster_id"].values)

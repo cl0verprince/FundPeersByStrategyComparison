@@ -13,24 +13,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.tree import DecisionTreeClassifier, export_text
 
+from fundspeers.category import category_tier
 from fundspeers.io import load_table, save_table
 
 log = logging.getLogger(__name__)
-
-_CATEGORY_TIERS = {
-    "Large": ("Large Blend", "Large Value", "Large Growth"),
-    "Mid": ("Mid-Cap Blend", "Mid-Cap Value", "Mid-Cap Growth"),
-    "Small": ("Small Blend", "Small Value", "Small Growth"),
-}
-
-
-def category_tier(category: str) -> str:
-    """Same Large/Mid/Small/Sector-Other bucketing step2 uses for validation - a fund's
-    tier is stable across quarters, unlike its arbitrary per-quarter cluster_id."""
-    for tier, names in _CATEGORY_TIERS.items():
-        if category in names:
-            return tier
-    return "Sector/Other"
 
 
 def _sorted_monthly_returns(monthly_returns: pd.DataFrame) -> pd.DataFrame:

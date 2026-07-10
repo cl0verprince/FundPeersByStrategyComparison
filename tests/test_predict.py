@@ -6,7 +6,6 @@ from pytest import approx
 
 from steps.step4_predict.predict import (
     assemble_panel,
-    category_tier,
     compute_trailing_features,
     time_based_split,
 )
@@ -19,12 +18,6 @@ def _monthly_rows(series_id, quarters, pct_returns_per_quarter):
             rows.append({"series_id": series_id, "quarter": quarter,
                          "month_in_quarter": i + 1, "total_return": r})
     return rows
-
-
-def test_category_tier_matches_step2s_bucketing():
-    assert category_tier("Large Growth") == "Large"
-    assert category_tier("Small Value") == "Small"
-    assert category_tier("Foreign Large Blend") == "Sector/Other"
 
 
 def test_trailing_features_are_point_in_time_safe():

@@ -4,7 +4,6 @@ step (steps/step2_similarity/design.md documents the empirical validation)."""
 import pandas as pd
 
 from steps.step2_similarity.similarity import (
-    _category_tier,
     build_holdings_description,
     compute_purity,
     normalize_issuer_name,
@@ -34,11 +33,3 @@ def test_compute_purity_is_majority_fraction_weighted_by_cluster_size():
     truth = pd.Series(["A", "A", "B", "B"])
     purity = compute_purity(clusters, truth)
     assert purity == (2 + 1) / 4
-
-
-def test_category_tier_buckets_known_style_boxes_and_falls_back_to_other():
-    assert _category_tier("Large Blend") == "Large"
-    assert _category_tier("Small Growth") == "Small"
-    assert _category_tier("Mid-Cap Value") == "Mid"
-    assert _category_tier("Foreign Large Blend") == "Sector/Other"
-    assert _category_tier(None) == "Sector/Other"

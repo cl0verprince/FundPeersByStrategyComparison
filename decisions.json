@@ -78,5 +78,10 @@
     "date": "2026-07-10",
     "decision": "step5_narrate generates narrations on demand (via narrate_fund()) rather than precomputing a persisted table for all 4,356 fund-quarters; the conductor's run() only narrates one illustrative example (the highest predicted-underperformance-probability fund in the test split).",
     "rationale": "There's no requirement to narrate the whole panel, and doing so would be slow/costly for a local model with no clear use for the bulk output. Verified end-to-end against the live LM Studio server (confirmed running phi-4 at http://127.0.0.1:1234/v1): every claim in a real narration (ticker, category, all four whole-history metrics, quarterly return, cluster id, purity/ARI, two named peers, predicted probability, actual outcome) was spot-checked against the raw retrieved context and matched exactly - no invented numbers or peers. Both documented edge cases (no prediction available, no resolved cluster) were tested directly and handled gracefully."
+  },
+  {
+    "date": "2026-07-11",
+    "decision": "Added hard (deterministic, rule-based) cluster definitions - dominant category/tier and average risk metrics per (quarter, cluster_id) - rather than an LLM-generated description, keeping clusters' numeric ids as their only label until now.",
+    "rationale": "Clusters previously had no human-readable identity at all, just an arbitrary per-quarter number. A rule-based definition (majority category, average Sharpe/volatility) keeps the same LLM boundary already established in step5 - the model narrates already-computed facts, it never labels or decides anything itself. Lives in step3 (needs fund_metrics_overall, which doesn't exist until step3 runs) even though it describes step2's clusters. Needing category_tier a third time here (after step2 and step4) triggered extracting it into a shared fundspeers/category.py module instead of copy-pasting again - verified as a pure refactor by re-running step2 and confirming byte-identical purity/ARI results."
   }
 ]

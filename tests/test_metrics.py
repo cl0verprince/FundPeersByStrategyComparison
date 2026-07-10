@@ -4,6 +4,7 @@ import pandas as pd
 from pytest import approx
 
 from steps.step3_metrics.metrics import (
+    compute_cluster_definitions,
     compute_cluster_relative_metrics,
     compute_overall_metrics,
     compute_quarterly_returns,
@@ -78,3 +79,35 @@ def test_cluster_relative_metrics_excludes_missing_cluster_rows_not_group_them_t
     assert pd.isna(s3_row["cluster_median_return"])
     assert pd.isna(s4_row["cluster_median_return"])
     assert pd.isna(s3_row["return_vs_cluster_median"])
+
+
+def test_compute_cluster_definitions_picks_dominant_category_and_averages_metrics():
+    fund_clusters = pd.DataFrame([
+        {"series_id": "S1", "quarter": "2024q1", "cluster_id": 0},
+        {"series_id": "S2", "quarter": "2024q1", "cluster_id": 0},
+        {"series_id": "S3", "quarter": "2024q1", "cluster_id": 0},
+    ])
+    funds = pd.DataFrame([
+        {"series_id": "S1", "quarter": "2024q1", "yahoo_category": "Small Value"},
+        {"series_id": "S2", "quarter": "2024q1", "yahoo_category": "Small Value"},
+        {"series_id": "S3", "quarter": "2024q1", "yahoo_category": "Small Growth"},
+    ])
+    fund_metrics_overall = pd.DataFrame([
+        {"series_id": "S1", "annualized_volatility": 0.20, "sharpe_ratio": 0.5,
+         "cumulative_return": 0.1, "max_drawdown": -0.1},
+        {"series_id": "S2", "annualized_volatility": 0.30, "sharpe_ratio": 0.3,
+         "cumulative_return": 0.2, "max_drawdown": -0.2},
+        {"series_id": "S3", "annualized_volatility": 0.25, "sharpe_ratio": 0.4,
+         "cumulative_return": 0.15, "max_drawdown": -0.15},
+    ])
+    result = compute_cluster_definitions(fund_clusters, funds, fund_metrics_overall)
+    assert len(result) == 1
+    row = result.iloc[0]
+    assert row["member_count"] == 3
+    assert row["dominant_category"] == "Small Value"  # 2 of 3
+    assert row["dominant_category_share"] == approx(2 / 3)
+    assert row["dominant_tier"] == "Small"
+    assert row["avg_volatility"] == approx((0.20 + 0.30 + 0.25) / 3)
+    assert row["avg_sharpe"] == approx((0.5 + 0.3 + 0.4) / 3)
+    assert "Small tilt" in row["title"]
+    assert "Small Value" in row["title"]

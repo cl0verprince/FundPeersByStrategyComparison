@@ -1,5 +1,22 @@
 # step3_metrics — design
 
+## Post-hoc addition (2026-07-11): hard, rule-based cluster definitions
+Step2's clusters only ever had a bare numeric `cluster_id` (0-14), arbitrary and not even
+comparable across quarters. On request, added `compute_cluster_definitions()`: one row per
+(quarter, cluster_id) with a **deterministic, non-LLM** description of that cluster's
+membership - dominant `yahoo_category` (+ its share), dominant market-cap tier, and the
+cluster's average whole-period volatility/Sharpe, plus a formatted one-line `title`. Lives in
+step3 (not step2) because it needs `fund_metrics_overall`, which doesn't exist until step3 runs.
+This is intentionally **rule-based, not LLM-generated** - it keeps the same boundary already
+established for step5 (the LLM narrates already-computed facts, it never decides or labels
+anything itself). Real output read well: e.g. `"Sector/Other tilt: 86% Real Estate (7 funds),
+avg volatility 23%, avg Sharpe 0.05"` and `"Sector/Other tilt: 100% Energy Limited Partnership
+(3 funds), avg volatility 18%, avg Sharpe 1.08"` for 2024q4.
+
+Also prompted a small refactor: `category_tier()` was duplicated in step2 and step4; needing
+it a third time here was the trigger to extract it into a shared `fundspeers/category.py`
+(the "rule of three" for duplication) rather than copy-pasting a third time.
+
 ## Purpose (traces to Required Output)
 From `monthly_returns`, compute standard performance/risk metrics for every US-equity fund,
 and each fund's return relative to its own quarter's cluster (from step2) — the features step4's

@@ -8,6 +8,7 @@ import logging
 import numpy as np
 import pandas as pd
 
+from fundspeers.category import category_tier
 from fundspeers.io import load_table, save_table
 
 log = logging.getLogger(__name__)
@@ -73,6 +74,40 @@ def compute_cluster_relative_metrics(
     return merged
 
 
+def compute_cluster_definitions(
+    fund_clusters: pd.DataFrame, funds: pd.DataFrame, fund_metrics_overall: pd.DataFrame
+) -> pd.DataFrame:
+    """One row per (quarter, cluster_id): a deterministic, rule-based description of that
+    cluster's membership - not an LLM-generated one (step5 narrates individual funds; this
+    is a hard, reproducible definition computed straight from already-verified data)."""
+    category_by_fund_quarter = funds[["series_id", "quarter", "yahoo_category"]].drop_duplicates()
+    df = fund_clusters.merge(category_by_fund_quarter, on=["series_id", "quarter"], how="left")
+    df["tier"] = df["yahoo_category"].map(category_tier)
+    df = df.merge(fund_metrics_overall, on="series_id", how="left")
+
+    rows = []
+    for (quarter, cluster_id), group in df.groupby(["quarter", "cluster_id"]):
+        member_count = len(group)
+        dominant_category = group["yahoo_category"].mode().iloc[0]
+        dominant_category_share = (group["yahoo_category"] == dominant_category).mean()
+        dominant_tier = group["tier"].mode().iloc[0]
+        avg_volatility = group["annualized_volatility"].mean()
+        avg_sharpe = group["sharpe_ratio"].mean()
+        title = (
+            f"{dominant_tier} tilt: {dominant_category_share:.0%} {dominant_category} "
+            f"({member_count} funds), avg volatility {avg_volatility:.0%}, "
+            f"avg Sharpe {avg_sharpe:.2f}"
+        )
+        rows.append({
+            "quarter": quarter, "cluster_id": cluster_id, "member_count": member_count,
+            "dominant_category": dominant_category,
+            "dominant_category_share": dominant_category_share,
+            "dominant_tier": dominant_tier, "avg_volatility": avg_volatility,
+            "avg_sharpe": avg_sharpe, "title": title,
+        })
+    return pd.DataFrame(rows)
+
+
 def run(cfg: dict) -> None:
     risk_free_annual = cfg["metrics"]["risk_free_annual"]
 
@@ -92,9 +127,13 @@ def run(cfg: dict) -> None:
         log.warning(f"{missing_cluster} fund-quarter(s) have no resolved cluster "
                     f"(step2's zero-EC-holdings edge case) - cluster-relative metrics are NaN")
 
+    cluster_definitions = compute_cluster_definitions(fund_clusters, funds, overall)
+
     save_table(overall, "fund_metrics_overall", cfg)
     save_table(quarterly, "fund_metrics_quarterly", cfg)
+    save_table(cluster_definitions, "cluster_definitions", cfg)
     log.info(f"saved fund_metrics_overall ({len(overall)} funds), "
-             f"fund_metrics_quarterly ({len(quarterly)} fund-quarters)")
+             f"fund_metrics_quarterly ({len(quarterly)} fund-quarters), "
+             f"cluster_definitions ({len(cluster_definitions)} quarter-cluster combos)")
     log.info(f"overall: mean Sharpe={overall['sharpe_ratio'].mean():.3f}, "
              f"mean max_drawdown={overall['max_drawdown'].mean():.3f}")
