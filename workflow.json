@@ -5,6 +5,6 @@
     {"name": "step2_similarity", "status": "done"},
     {"name": "step3_metrics", "status": "done"},
     {"name": "step4_predict", "status": "done"},
-    {"name": "step5_narrate", "status": "pending"}
+    {"name": "step5_narrate", "status": "done"}
   ]
 }

@@ -39,6 +39,8 @@
     }
   },
   "llm": {
-    "model_name": "phi-4"
+    "model_name": "phi-4",
+    "temperature": 0,
+    "top_peers_to_narrate": 5
   }
 }
