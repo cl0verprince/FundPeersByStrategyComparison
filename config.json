@@ -27,6 +27,11 @@
     "risk_free_annual": 0.02
   },
   "model": {
+    "test_transitions_holdout": 3,
+    "tree": {
+      "max_depth": 4,
+      "min_samples_leaf": 20
+    },
     "rf": {
       "n_estimators": 300,
       "max_depth": 8,
