@@ -34,6 +34,7 @@ Thumbs.db
 # Data & build artifacts
 data/raw/
 data/processed/
+models/
 *.log
 dist/
 build/

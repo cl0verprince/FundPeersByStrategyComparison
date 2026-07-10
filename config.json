@@ -7,6 +7,7 @@
       "2024q1", "2024q2", "2024q3", "2024q4"
     ],
     "max_funds": 1000,
+    "oos_max_funds": 1000,
     "equity_stock_position_min": 0.80,
     "us_holdings_share_min": 0.70,
     "yahoo_request_delay_seconds": 0.3,
@@ -15,7 +16,8 @@
   "paths": {
     "raw": "data/raw",
     "processed": "data/processed",
-    "reports": "reports"
+    "reports": "reports",
+    "models": "models"
   },
   "similarity": {
     "n_clusters": 15,

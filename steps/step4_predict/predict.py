@@ -14,7 +14,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.tree import DecisionTreeClassifier, export_text
 
 from fundspeers.category import category_tier
-from fundspeers.io import load_table, save_table
+from fundspeers.io import load_table, save_model, save_table
 
 log = logging.getLogger(__name__)
 
@@ -194,5 +194,11 @@ def run(cfg: dict) -> None:
 
     save_table(predictions, "fund_predictions", cfg)
     save_table(importances, "model_feature_importances", cfg)
+    # Bundle the model with the exact feature column list it was trained on - tier dummy
+    # columns depend on which category tiers are present in a given panel, so a frozen-model
+    # evaluation on a different fund set (step6) must align to this list, not just reuse its
+    # own pd.get_dummies() output blindly.
+    save_model({"model": rf, "feature_cols": feature_cols}, "random_forest_model", cfg)
     log.info(f"saved fund_predictions ({len(predictions)} rows), "
-             f"model_feature_importances ({len(importances)} rows)")
+             f"model_feature_importances ({len(importances)} rows), "
+             f"random_forest_model.joblib ({len(feature_cols)} features)")

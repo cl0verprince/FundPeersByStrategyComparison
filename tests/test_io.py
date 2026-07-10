@@ -6,13 +6,13 @@ data/processed/fundspeers.duckdb.
 import pandas as pd
 import pytest
 
-from fundspeers.io import load_table, save_table, table_exists
+from fundspeers.io import load_model, load_table, save_model, save_table, table_exists
 
 
 @pytest.fixture
 def cfg(tmp_path):
     return {"paths": {"raw": str(tmp_path / "raw"), "processed": str(tmp_path / "processed"),
-                       "reports": str(tmp_path / "reports")}}
+                       "reports": str(tmp_path / "reports"), "models": str(tmp_path / "models")}}
 
 
 def test_save_and_load_table_round_trips(cfg):
@@ -38,3 +38,12 @@ def test_save_table_overwrites_on_rerun(cfg):
 def test_invalid_table_name_is_rejected(cfg):
     with pytest.raises(ValueError):
         save_table(pd.DataFrame({"a": [1]}), "widgets; DROP TABLE funds", cfg)
+
+
+def test_save_and_load_model_round_trips(cfg):
+    from sklearn.tree import DecisionTreeClassifier
+
+    model = DecisionTreeClassifier(random_state=0).fit([[0], [1], [2], [3]], [0, 0, 1, 1])
+    save_model(model, "test_model", cfg)
+    reloaded = load_model("test_model", cfg)
+    assert reloaded.predict([[0], [3]]).tolist() == model.predict([[0], [3]]).tolist()

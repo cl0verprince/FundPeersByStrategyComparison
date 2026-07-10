@@ -229,7 +229,14 @@ def _combine_us_equity_flag(
     return funds_static
 
 
-def run(cfg: dict) -> None:
+def run(cfg: dict, exclude_series: set = None, table_suffix: str = "") -> None:
+    """`exclude_series` and `table_suffix` (both default to the original behavior) let a
+    second call sample a genuinely disjoint fund set into a parallel table namespace - see
+    steps/step6_out_of_sample/design.md. Passing exclude_series does NOT change the shuffle
+    order of the remaining candidates (the same full candidate list is shuffled with the same
+    seed either way) - excluded ids are simply skipped during iteration, so a fresh run's
+    candidate order for the non-excluded funds is bit-identical to the original run's."""
+    exclude_series = exclude_series or set()
     quarters = cfg["data"]["quarters"]
     max_funds = cfg["data"]["max_funds"]
     stock_position_min = cfg["data"]["equity_stock_position_min"]
@@ -271,6 +278,8 @@ def run(cfg: dict) -> None:
     for series_id in candidate_order:
         if len(funds_rows) >= max_funds:
             break
+        if series_id in exclude_series:
+            continue
         attempted += 1
         ticker = series_to_ticker.get(series_id)
         if not ticker:
@@ -347,10 +356,10 @@ def run(cfg: dict) -> None:
              f"flagged US equity (yahoo equity AND holdings US-share >= {us_holdings_share_min})")
 
     # Stage 9: persist.
-    save_table(funds, "funds", cfg)
-    save_table(holdings, "holdings", cfg)
-    save_table(monthly_returns, "monthly_returns", cfg)
+    save_table(funds, f"funds{table_suffix}", cfg)
+    save_table(holdings, f"holdings{table_suffix}", cfg)
+    save_table(monthly_returns, f"monthly_returns{table_suffix}", cfg)
     log.info(
-        f"saved funds ({len(funds)} rows), holdings ({len(holdings)} rows), "
-        f"monthly_returns ({len(monthly_returns)} rows)"
+        f"saved funds{table_suffix} ({len(funds)} rows), holdings{table_suffix} "
+        f"({len(holdings)} rows), monthly_returns{table_suffix} ({len(monthly_returns)} rows)"
     )

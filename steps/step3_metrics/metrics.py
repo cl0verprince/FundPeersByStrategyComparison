@@ -108,12 +108,14 @@ def compute_cluster_definitions(
     return pd.DataFrame(rows)
 
 
-def run(cfg: dict) -> None:
+def run(cfg: dict, table_suffix: str = "") -> None:
+    """`table_suffix` (defaults to the original behavior) reads/writes a parallel table
+    namespace (e.g. "_oos") - see steps/step6_out_of_sample/design.md."""
     risk_free_annual = cfg["metrics"]["risk_free_annual"]
 
-    funds = load_table("funds", cfg)
-    monthly_returns = load_table("monthly_returns", cfg)
-    fund_clusters = load_table("fund_clusters", cfg)
+    funds = load_table(f"funds{table_suffix}", cfg)
+    monthly_returns = load_table(f"monthly_returns{table_suffix}", cfg)
+    fund_clusters = load_table(f"fund_clusters{table_suffix}", cfg)
 
     equity_series = set(funds.loc[funds["is_us_equity"], "series_id"].unique())
     equity_returns = monthly_returns[monthly_returns["series_id"].isin(equity_series)]
@@ -129,11 +131,11 @@ def run(cfg: dict) -> None:
 
     cluster_definitions = compute_cluster_definitions(fund_clusters, funds, overall)
 
-    save_table(overall, "fund_metrics_overall", cfg)
-    save_table(quarterly, "fund_metrics_quarterly", cfg)
-    save_table(cluster_definitions, "cluster_definitions", cfg)
-    log.info(f"saved fund_metrics_overall ({len(overall)} funds), "
-             f"fund_metrics_quarterly ({len(quarterly)} fund-quarters), "
-             f"cluster_definitions ({len(cluster_definitions)} quarter-cluster combos)")
+    save_table(overall, f"fund_metrics_overall{table_suffix}", cfg)
+    save_table(quarterly, f"fund_metrics_quarterly{table_suffix}", cfg)
+    save_table(cluster_definitions, f"cluster_definitions{table_suffix}", cfg)
+    log.info(f"saved fund_metrics_overall{table_suffix} ({len(overall)} funds), "
+             f"fund_metrics_quarterly{table_suffix} ({len(quarterly)} fund-quarters), "
+             f"cluster_definitions{table_suffix} ({len(cluster_definitions)} quarter-cluster combos)")
     log.info(f"overall: mean Sharpe={overall['sharpe_ratio'].mean():.3f}, "
              f"mean max_drawdown={overall['max_drawdown'].mean():.3f}")

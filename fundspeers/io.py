@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 import duckdb
+import joblib
 import pandas as pd
 
 from fundspeers.config import PROJECT_ROOT
@@ -35,6 +36,22 @@ def reports_dir(cfg: dict) -> Path:
 
 def db_path(cfg: dict) -> Path:
     return processed_dir(cfg) / "fundspeers.duckdb"
+
+
+def models_dir(cfg: dict) -> Path:
+    p = PROJECT_ROOT / cfg["paths"]["models"]
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def save_model(model, name: str, cfg: dict) -> Path:
+    path = models_dir(cfg) / f"{name}.joblib"
+    joblib.dump(model, path)
+    return path
+
+
+def load_model(name: str, cfg: dict):
+    return joblib.load(models_dir(cfg) / f"{name}.joblib")
 
 
 def _validate_table_name(name: str) -> None:

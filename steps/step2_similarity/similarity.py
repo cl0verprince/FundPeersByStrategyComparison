@@ -97,30 +97,33 @@ def get_peers(series_id: str, quarter: str, cfg: dict) -> pd.DataFrame:
 
 
 def _plot_cluster_map(vectors: pd.DataFrame, cluster_labels: pd.Series, quarter: str,
-                       seed: int, cfg: dict) -> None:
+                       seed: int, cfg: dict, table_suffix: str = "") -> None:
     pca = PCA(n_components=2, random_state=seed)
     coords = pca.fit_transform(vectors.values)
     fig, ax = plt.subplots(figsize=(8, 6))
     scatter = ax.scatter(coords[:, 0], coords[:, 1], c=cluster_labels.values, cmap="tab20", s=25)
-    ax.set_title(f"Fund strategy clusters ({quarter}) - PCA projection of holdings embeddings")
+    ax.set_title(f"Fund strategy clusters ({quarter}{table_suffix}) - PCA projection of holdings embeddings")
     ax.set_xlabel("PC1")
     ax.set_ylabel("PC2")
     fig.colorbar(scatter, ax=ax, label="cluster_id")
-    out_path = reports_dir(cfg) / f"cluster_map_{quarter}.png"
+    out_path = reports_dir(cfg) / f"cluster_map_{quarter}{table_suffix}.png"
     fig.savefig(out_path, dpi=120, bbox_inches="tight")
     plt.close(fig)
     log.info(f"wrote {out_path}")
 
 
-def run(cfg: dict) -> None:
+def run(cfg: dict, table_suffix: str = "") -> None:
+    """`table_suffix` (defaults to the original behavior) lets this run against a parallel,
+    disjoint fund set (e.g. "_oos") without touching the original tables - see
+    steps/step6_out_of_sample/design.md."""
     seed = cfg["seed"]
     n_clusters = cfg["similarity"]["n_clusters"]
     top_n_peers = cfg["similarity"]["top_n_peers"]
     embedding_model = cfg["similarity"]["embedding_model"]
     top_holdings = cfg["similarity"]["top_holdings_for_description"]
 
-    funds = load_table("funds", cfg)
-    holdings = load_table("holdings", cfg)
+    funds = load_table(f"funds{table_suffix}", cfg)
+    holdings = load_table(f"holdings{table_suffix}", cfg)
 
     equity_series = set(funds.loc[funds["is_us_equity"], "series_id"].unique())
     equity_accessions = set(
@@ -183,11 +186,11 @@ def run(cfg: dict) -> None:
 
         latest_vectors, latest_labels = vectors, labels
 
-    save_table(pd.DataFrame(cluster_rows), "fund_clusters", cfg)
-    save_table(pd.DataFrame(peer_rows), "fund_peers", cfg)
-    save_table(pd.DataFrame(validation_rows), "cluster_validation", cfg)
+    save_table(pd.DataFrame(cluster_rows), f"fund_clusters{table_suffix}", cfg)
+    save_table(pd.DataFrame(peer_rows), f"fund_peers{table_suffix}", cfg)
+    save_table(pd.DataFrame(validation_rows), f"cluster_validation{table_suffix}", cfg)
 
-    _plot_cluster_map(latest_vectors, latest_labels, quarters[-1], seed, cfg)
+    _plot_cluster_map(latest_vectors, latest_labels, quarters[-1], seed, cfg, table_suffix)
 
     mean_purity = pd.DataFrame(validation_rows)["purity"].mean()
     mean_ari = pd.DataFrame(validation_rows)["adjusted_rand_index"].mean()
