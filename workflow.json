@@ -6,6 +6,7 @@
     {"name": "step3_metrics", "status": "done"},
     {"name": "step4_predict", "status": "done"},
     {"name": "step5_narrate", "status": "done"},
-    {"name": "step6_out_of_sample", "status": "done"}
+    {"name": "step6_out_of_sample", "status": "done"},
+    {"name": "step7_unified_universe", "status": "done"}
   ]
 }

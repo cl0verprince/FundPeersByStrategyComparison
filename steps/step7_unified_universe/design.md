@@ -199,3 +199,58 @@ pipeline later, wiring it into the conductor is its own explicit decision.
 - Model round-trip: reloaded `unified_rf_model.joblib` reproduces in-memory predictions.
 - `unified_predictions` includes a genuine forward prediction set (2024q4 features →
   2025q1, unlabeled) for the dashboard.
+
+## UAT results (real full run, 2026-07-11)
+Measured from the clean end-to-end run (`.superpowers/sdd/task-9-run.log`, EXIT_CODE=0;
+`unified_model_eval` + `unified_label_stability`).
+
+**Lead finding, before the table:** the persistence baseline scored AUC **0.285 — below
+0.5 — so peer-relative quarterly returns MEAN-REVERT.** Raw persistence is therefore an
+*inverted* rule; the meaningful naive rule is *reversed* persistence (~0.715), and the
+model's AUC 0.717 only ties it (edge ≈0.002). The model beats a coin flip, not a competent
+naive analyst. Full reasoning in the Interpretation section below the table — read it before
+reading the PASS column.
+
+One line per UAT criterion:
+
+| # | Criterion | Measured | Verdict |
+|---|-----------|----------|---------|
+| 1 | `funds_all` has exactly 2,243 unique equity `series_id`s, zero duplicates, segment split logged | **2,243** unique equity funds; **2,087 strategy / 156 allocation** | PASS |
+| 2a | Strategy clustering at k=30: purity/ARI vs Yahoo categories reported per quarter | 12 quarters logged; purity range **0.504–0.544**, ARI range **0.229–0.297**; 12-quarter mean purity **0.521**, ARI **0.257** | PASS |
+| 2b | No quarter with more than ~6 clusters under 20 members | 11/12 quarters have 2–6 small clusters; **2022q1 has 9** | **MARGINAL** — one quarter (2022q1) exceeds the soft "~6" bar; the other eleven pass |
+| 2c | Zero TDF-dominated clusters | **0 of 360** quarter-cluster `short_title`s match target/date/TDF/retire (case-insensitive) | PASS |
+| 3 | Every strategy fund-quarter has 10 peers; label coverage reported, rows dropped for <5 valid-peer returns <2% of panel | **0.0%** dropped for insufficient peers (label module logged no drop line); panel **20,838** labeled rows + **2,086** forward rows. (Separate, distinct mechanism: panel.py dropped **2,108/25,032 = 8.4%** of rows for a missing feature, dominated by first-quarter `net_assets_qoq` — not the label-coverage criterion.) | PASS |
+| 4a | Unified model beats both baselines: pooled test AUC above 0.5 and above persistence | pooled test AUC **0.717** [95% CI 0.703, 0.729] vs random 0.500 vs persistence **0.285**; edge-over-persistence CI **[0.407, 0.457]**, **p(edge≤0)=0.0000** (2,000 fund-clustered bootstrap iters) | PASS |
+| 4b | Above persistence in a majority of individual test quarters | **3/3** test quarters (2024q1 0.747 vs 0.266; 2024q2 0.632 vs 0.351; 2024q3 0.763 vs 0.241) | PASS |
+| 5 | Uncertainty layer reported honestly (bootstrap CI on pooled AUC; CI + one-sided p for edge; label flip-rate summary) — reporting criteria, not thresholds | All three reported: AUC CI [0.703, 0.729]; edge CI [0.407, 0.457], p(edge≤0)=0.0000; label mean flip rate **0.082**, **22.2%** of fund-quarters flip on >10% of draws (n=22,946, 100 draws) | REPORTED — not pass/fail (excluded from tally) |
+| 6 | Model round-trip: reloaded `unified_rf_model.joblib` reproduces in-memory predictions | Reloaded joblib reproduced **20,838** predictions; label-definition metadata intact | PASS |
+| 7 | `unified_predictions` includes a genuine forward set (2024q4 → 2025q1, unlabeled) | `split='forward'` count = **2,086** (train 14,577 / test 6,261) | PASS |
+
+**Tally: 8 PASS, 1 MARGINAL** (small-cluster count in 2022q1 only).
+
+### Interpretation — read this before the tally
+**The persistence baseline scored AUC 0.285, far BELOW 0.5. That is the headline finding:
+peer-relative quarterly returns MEAN-REVERT.** A fund that beat its peer median this quarter
+is, if anything, *more* likely to fall below it next quarter. So the naive persistence rule
+("keep doing what you did last quarter") is not a weak baseline the model crushes — it is an
+*inverted* one. The genuinely meaningful naive rule is **reversed persistence** (bet on mean
+reversion), which scores ~0.715 (= 1 − 0.285). Measured against *that* best naive rule, the
+model's edge is ~0.717 − 0.715 ≈ **0.002 — essentially a tie.** The formal UAT criterion
+("beat persistence pooled AND in a majority of quarters") passes cleanly and honestly, but it
+would be misleading to read the huge 0.43 edge over raw persistence as model strength: almost
+all of it is just persistence being upside-down. The RF's top feature is
+`return_vs_peer_median_q`, and the model has largely *learned the one-line mean-reversion rule*
+— it captures nearly all of the available signal, and a single hand-written reversed-persistence
+rule would capture nearly as much. The defensible claim is narrow and true: the model beats a
+coin flip (0.717 vs 0.500, tight CI, p≈0 that the edge over raw persistence is illusory) and
+matches the best simple rule; it is not a large independent edge over a competent naive analyst.
+
+Two further honesty items frame that number. **(a) Label noise floor:** the peer-perturbation
+study shows a mean flip rate of 0.082 and 22.2% of fund-quarters flipping the underperform
+label on >10% of peer-set draws (n=22,946) — an ~8% intrinsic label-noise floor that caps how
+high any AUC on this target can go, and a guard against chasing improvements into noise.
+**(b) Granularity was not the whole story:** the approach-B sanity check (§6) — the old
+cluster-median label re-run at k=30 on the merged universe — scored **0.689 vs the unified
+model's 0.717**, below the unified model's CI. So the label/feature redefinition (kNN-peer
+median + holdings features), not finer clustering alone, does most of the remaining work; finer
+clusters alone would have left the old approach short.
