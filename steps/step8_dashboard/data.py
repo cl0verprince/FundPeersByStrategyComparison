@@ -42,7 +42,8 @@ def _top_holdings_for(members, latest_quarter, funds, holdings, top_n=10):
         return []
     ec["sid"] = ec["accession_number"].map(acc_to_sid)
     ec["w"] = ec.groupby("sid")["currency_value"].transform(lambda v: v / v.sum())
-    avg = (ec.groupby("issuer_name")["w"].sum() / len(members)).sort_values(ascending=False)
+    avg = (ec.groupby("issuer_name")["w"].sum() / len(members)).sort_index()
+    avg = avg.sort_values(ascending=False, kind="stable")
     return [{"issuer": issuer, "weight": round(float(w), 6)}
             for issuer, w in avg.head(top_n).items()]
 
@@ -90,6 +91,7 @@ def build_payload(cfg: dict, narratives: dict) -> dict:
         member_ids = sorted(latest_clusters.loc[
             latest_clusters["cluster_id"] == cluster_id, "series_id"])
         members = []
+        present_member_ids = []
         for sid in member_ids:
             fund_row = latest_funds[latest_funds["series_id"] == sid]
             if fund_row.empty:
@@ -99,6 +101,7 @@ def build_payload(cfg: dict, narratives: dict) -> dict:
             prob = (_none_if_na(forward.loc[sid, "predicted_probability"])
                     if sid in forward.index else None)
             members.append(_member_row(fund_row.iloc[0], metrics_row, probability=prob))
+            present_member_ids.append(sid)
         member_metrics = pd.DataFrame(members)
         cluster_payloads.append({
             "cluster_id": int(cluster_id),
@@ -110,7 +113,7 @@ def build_payload(cfg: dict, narratives: dict) -> dict:
             "avg_volatility": _none_if_na(member_metrics["volatility"].mean()) if len(members) else None,
             "avg_max_drawdown": _none_if_na(member_metrics["max_drawdown"].mean()) if len(members) else None,
             "median_net_assets": _none_if_na(member_metrics["net_assets"].median()) if len(members) else None,
-            "top_holdings": _top_holdings_for(set(member_ids), latest, equity, holdings),
+            "top_holdings": _top_holdings_for(set(present_member_ids), latest, equity, holdings),
             "narrative": narratives.get(int(cluster_id), ""),
             "members": members,
         })

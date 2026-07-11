@@ -35,7 +35,7 @@ def tables(cfg):
          "sharpe_ratio": 0.5, "max_drawdown": -0.1} for s in ["F1", "F2", "T1"]]),
         "fund_metrics_overall_all", cfg)
     save_table(pd.DataFrame([
-        {"series_id": s, "quarter": q, "cluster_id": 0} for s in ["F1", "F2"]]),
+        {"series_id": s, "quarter": q, "cluster_id": 0} for s in ["F1", "F2", "F3"]]),
         "fund_clusters_all", cfg)
     save_table(pd.DataFrame([
         {"series_id": "F1", "quarter": q, "predicted_probability": 0.7,
@@ -82,3 +82,17 @@ def test_payload_is_deterministic(cfg, tables):
     a = json.dumps(build_payload(cfg, narratives={}), sort_keys=True)
     b = json.dumps(build_payload(cfg, narratives={}), sort_keys=True)
     assert a == b
+
+
+def test_top_holdings_averaged_over_filtered_members_only(cfg, tables):
+    # F3 is a cluster member (fund_clusters_all) with no funds_all row, so it's absent from
+    # latest_funds and gets skipped via `continue` when building `members`. top_holdings must
+    # average over the same 2 filtered members the payload reports, not the unfiltered 3.
+    payload = build_payload(cfg, narratives={})
+    cluster = payload["clusters"][0]
+    assert cluster["member_count"] == 2
+    holdings = {h["issuer"]: h["weight"] for h in cluster["top_holdings"]}
+    # Both real members hold 100% ACME CORP after sleeve-renormalization, so the average
+    # weight over the correct (filtered) denominator of 2 is 1.0 - not 2/3 (~0.667), which
+    # is what the old buggy denominator (unfiltered count of 3) would have produced.
+    assert holdings["ACME CORP"] == 1.0
