@@ -116,3 +116,25 @@ AUC=0.725, `fund_predictions` regenerated to 8266 rows (6005 train + 2261 test).
   improvement over both prior numbers, consistent with "more diverse training data helps a
   little," a different and complementary finding to the frozen-model result, not a replacement
   for it.
+
+## Follow-up (2026-07-11): a third disjoint batch (oos2) and the composition-effect finding
+A genuinely fresh 3rd batch was sampled (`table_suffix="_oos2"`: 4000-fund target, exclude_series
+= union of both prior batches, 4000/4000 resolved, 1489 flagged US equity, confirmed disjoint).
+Pipeline consistency held: purity=0.427/ARI=0.293 (vs. 0.409/0.249 original, 0.459/0.291 first OOS).
+`evaluate_frozen_model_on_oos()` gained a `table_suffix` param (default `"_oos"`) and the
+retrain/promote helpers gained a `table_suffixes` tuple param (default `("", "_oos")`) plus a
+`backup_name` guard that refuses to overwrite an existing backup.
+
+Results: the promoted 754-fund model scored **AUC=0.701 frozen on oos2** (consistent with 0.693 on
+the first OOS batch - the model generalizes). But the naive 3-way retrain scored **AUC=0.680** vs
+the official model's 0.725. Per-origin breakdown: 0.708 original / 0.700 oos / 0.668 oos2 test
+rows, with oos2 66% of the blended test set - and the frozen model scores 0.691 on that same oos2
+2024 slice. So the drop is a **composition effect** (oos2 is intrinsically harder for this method,
+dominating the test mix), not training corruption. Root cause: with n_clusters fixed at 15, oos2's
+clusters have median 62 members (vs 12 originally), diluting both the label and the model's top
+feature. **The 3-way retrain was deliberately NOT promoted**; the diagnosis motivated the
+step7_unified_universe redesign (merged universe, kNN-peer label) instead.
+
+Operational observation, not fixed: `exclude_series` only tracks *successes* across ingestion
+runs, not failures, so each new batch re-attempts (and re-fails) previously-failed candidates -
+6378 attempts for 4000 resolutions on this batch.

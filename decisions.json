@@ -108,5 +108,10 @@
     "date": "2026-07-11",
     "decision": "Promoted the retrained-on-combined model (754 funds, test AUC=0.725) to be the new official models/random_forest_model.joblib, replacing the original 363-fund model - backed up to random_forest_model_original_363funds.joblib rather than silently overwritten, and regenerated fund_predictions/model_feature_importances so the persisted tables stay consistent with whichever model is actually saved as official.",
     "rationale": "User explicitly opted in after being told the retrained model was never persisted before (only its AUC was reported) - promoting is a deliberate, explicit action, not an automatic side effect of running step6's evaluation."
+  },
+  {
+    "date": "2026-07-11",
+    "decision": "Evaluated a fresh 3rd disjoint batch (oos2, 1489 equity funds): frozen official model AUC=0.701 (generalizes), but a naive 3-way retrain scored 0.680 vs the official 0.725 - diagnosed as a composition effect and deliberately NOT promoted; motivated the step7_unified_universe redesign instead.",
+    "rationale": "Per-origin test AUC (0.708 original / 0.700 oos / 0.668 oos2, with oos2 66% of test rows) plus the frozen model scoring 0.691 on the identical oos2 slice showed the blended drop reflects a harder new population, not corrupted training. Root cause traced to fixed n_clusters=15: oos2's median cluster is 62 funds vs 12 originally, so the cluster-median label and the model's top feature both degrade with population size - a task-definition problem no amount of retraining fixes, hence the redesign (merged universe, constant-size kNN-peer benchmark)."
   }
 ]
