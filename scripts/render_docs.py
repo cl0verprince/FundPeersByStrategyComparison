@@ -1,9 +1,11 @@
 """Render project docs to self-contained, offline HTML.
 
-Reads two small data files and writes two double-clickable HTML pages with
+Reads three small data files and writes two double-clickable HTML pages with
 NO external dependencies (inline CSS, inline SVG — no CDN, no network):
 
-  decisions.json  ->  reflection.html   (decision log, one card per entry)
+  techniques.json +
+  decisions.json  ->  reflection.html   (why-these-techniques section, then the
+                                         decision log, one card per entry)
   workflow.json   ->  workflow.html     (vertical step-flow diagram)
 
 The agent edits the JSON; this script owns the markup. Same input -> same
@@ -11,9 +13,11 @@ output, every run.
 
 Usage:
   python render_docs.py [--decisions decisions.json] [--workflow workflow.json]
-                        [--out-dir .]
+                        [--techniques techniques.json] [--out-dir .]
 
 decisions.json:  [{"date": "2026-07-07", "decision": "...", "rationale": "..."}]
+techniques.json: [{"technique": "...", "why": "..."}]  (optional file; section
+                 is omitted from reflection.html when absent)
 workflow.json :  {"steps": [{"name": "step0_setup", "status": "done"}, ...]}
                  status is one of: done | in_progress | pending
 """
@@ -49,6 +53,8 @@ _CARD_CSS = """
   .rationale { margin: 0; }
   .rationale::before { content: "Why: "; font-weight: 600; opacity: .8; }
   .date { float: right; font-size: .8rem; opacity: .6; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 1rem; }
+  h2:first-of-type { margin-top: 0; }
 """
 
 
@@ -63,8 +69,20 @@ def _page(title: str, body: str, extra_css: str = "") -> str:
     )
 
 
-def render_reflection(decisions: list) -> str:
-    """One card per decision: what was decided + why."""
+def render_reflection(decisions: list, techniques: list = None) -> str:
+    """Optional why-these-techniques primer, then one card per decision."""
+    sections = []
+    if techniques:
+        cards = []
+        for t in techniques:
+            technique = html.escape(str(t.get("technique", "")))
+            why = html.escape(str(t.get("why", "")))
+            cards.append(
+                f'<div class="card"><p class="decision">{technique}</p>'
+                f'<p class="rationale">{why}</p></div>'
+            )
+        sections.append("<h2>Why these techniques</h2>\n" + "\n".join(cards))
+
     cards = []
     for d in decisions:
         date = html.escape(str(d.get("date", "")))
@@ -76,8 +94,9 @@ def render_reflection(decisions: list) -> str:
             f'<p class="decision">{decision}</p>'
             f'<p class="rationale">{rationale}</p></div>'
         )
-    body = "\n".join(cards) if cards else "<p>No decisions logged yet.</p>"
-    return _page("Reflection — decision log", body, _CARD_CSS)
+    log = "\n".join(cards) if cards else "<p>No decisions logged yet.</p>"
+    sections.append(("<h2>Decision log</h2>\n" if techniques else "") + log)
+    return _page("Reflection — decision log", "\n".join(sections), _CARD_CSS)
 
 
 def render_workflow(steps: list) -> str:
@@ -128,6 +147,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--decisions", default="decisions.json")
     ap.add_argument("--workflow", default="workflow.json")
+    ap.add_argument("--techniques", default="techniques.json")
     ap.add_argument("--out-dir", default=".")
     args = ap.parse_args()
 
@@ -136,8 +156,11 @@ def main() -> None:
 
     decisions = _load(Path(args.decisions), [])
     workflow = _load(Path(args.workflow), {"steps": []})
+    techniques = _load(Path(args.techniques), [])
 
-    (out / "reflection.html").write_text(render_reflection(decisions), encoding="utf-8")
+    (out / "reflection.html").write_text(
+        render_reflection(decisions, techniques), encoding="utf-8"
+    )
     (out / "workflow.html").write_text(
         render_workflow(workflow.get("steps", [])), encoding="utf-8"
     )

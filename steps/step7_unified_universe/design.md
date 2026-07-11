@@ -70,12 +70,27 @@ size distribution, TDF spread):
 
 Purity rises with k mechanically; **ARI (chance-corrected) peaks at k=20–30 and decays
 beyond** — past ~30 we shard real categories — and the under-20-members count explodes past
-k=40. k=30 is the sweet spot: near-peak ARI, best purity below the over-splitting cliff,
-median cluster ~34 funds, 22 distinct dominant categories. Config: `similarity.n_clusters`
-stays 15 for the legacy per-batch runs; new `unified.n_clusters: 30` applies to `_all`.
-(The sweep was run pre-segmentation, with TDFs included; k=30 is expected to serve the
-~2,100-fund strategy segment at least as well once the TDF family-suites stop consuming
-clusters — the step's UAT re-checks purity/ARI/size distribution on the segmented run.)
+k=40.
+
+A second sweep was then run on the **segmented** population (the ~2,086 strategy funds the
+clustering will actually serve, TDF/Allocation excluded), including k=35 on request, to
+check whether 35 buys extra category resolution between 30 and 40:
+
+| k  | silhouette | purity | ARI   | median size | clusters <20 funds | distinct dominant categories |
+|----|-----------|--------|-------|-------------|--------------------|------------------------------|
+| 25 | 0.073     | 0.528  | 0.323 | 64          | 5                  | 17                           |
+| 30 | 0.073     | 0.544  | 0.265 | 55          | 4                  | 21                           |
+| 35 | 0.065     | 0.562  | 0.264 | 41          | 10                 | 23                           |
+| 40 | 0.074     | 0.554  | 0.244 | 41          | 9                  | 23                           |
+
+k=35 vs k=30: only +2 distinct dominant categories (21→23) and flat ARI, while the
+under-20-members cluster count jumps 4→10 and silhouette dips — i.e. the extra 5 clusters
+mostly shard existing groups into underpowered fragments rather than resolving new
+categories. **k=30 confirmed**: on the segmented population it has the best power profile
+of the whole grid (only 4 small clusters, median 55) while keeping near-best category
+resolution. Config: `similarity.n_clusters` stays 15 for the legacy per-batch runs; new
+`unified.n_clusters: 30` applies to `_all`. The step's UAT re-checks purity/ARI/size
+distribution on the full segmented run across all quarters.
 
 ### 4. Label redefinition: kNN-peer median, not cluster median
 "Underperform" becomes: **a fund's next-quarter return is below the median of its own
