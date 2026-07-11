@@ -126,7 +126,11 @@ Report pooled AUC **and per-quarter AUC spread** (the oos2 work showed per-quart
 swings 0.588–0.819, so a pooled number alone over-states precision), plus feature
 importances. One-time sanity check, recorded here for the design record: the old
 cluster-median label with scaled clusters (approach B) is run once on the merged universe
-to confirm granularity was really the driver, then not maintained.
+to confirm granularity was really the driver, then not maintained. Run on 2026-07-11:
+scaled-cluster (k=30) old-label AUC on the merged universe = 0.689 vs the kNN-label unified
+model's 0.717 (CI [0.703, 0.729]) — complicates the granularity diagnosis: finer clusters
+alone leave the old-label approach below the unified model's CI, so the label/feature
+redefinition, not granularity alone, does most of the remaining work.
 
 ### 6b. Monte Carlo uncertainty layer (not a simulator of fund futures)
 Considered and deliberately scoped: Monte Carlo is NOT used to simulate fund returns —
