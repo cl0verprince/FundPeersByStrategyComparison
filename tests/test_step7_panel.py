@@ -30,7 +30,8 @@ def tables(cfg):
          "net_assets": 100.0 + i, "series_name": s, "ticker": s}
         for i, s in enumerate(IDS) for q in QUARTERS])
     returns = pd.DataFrame([
-        {"series_id": s, "quarter": q, "month_in_quarter": m, "total_return": 1.0 + i * 0.1}
+        {"series_id": s, "quarter": q, "month_in_quarter": m,
+         "total_return": 1.0 + i * 0.1 + m * 0.5 + (0.3 if q == "2024q2" else 0.0)}
         for i, s in enumerate(IDS) for q in QUARTERS for m in (1, 2, 3)])
     holdings = pd.DataFrame([
         {"accession_number": f"acc-{s}-{q}", "quarter": q, "asset_cat": "EC",
@@ -55,6 +56,7 @@ def test_panel_shapes_and_features(cfg, tables):
     # 2024q1 rows are labelable; net_assets_qoq is NaN in q1 so labeled may be empty -
     # the forward set must still carry complete 2024q2 features:
     assert set(forward["quarter"]) == {"2024q2"}
+    assert len(forward) == 6
     assert forward[feature_cols].notna().all().all()
     assert forward["underperform_next_quarter"].isna().all()
 
