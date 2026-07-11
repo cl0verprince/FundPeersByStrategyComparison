@@ -8,6 +8,10 @@ from steps.step8_dashboard.template import TEMPLATE
 
 def render_dashboard(payload: dict) -> str:
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    # Escape "<" (a no-op for JSON semantics) so that a "</script>" inside any
+    # payload string (LLM narratives, SEC-filed fund/issuer names) cannot
+    # prematurely close the embedding <script type="application/json"> tag.
+    blob = blob.replace("<", "\\u003c")
     return TEMPLATE.replace("__PAYLOAD_JSON__", blob)
 
 

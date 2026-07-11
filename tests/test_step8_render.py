@@ -1,4 +1,6 @@
 """Renderer: self-contained, deterministic, disclaimer everywhere, placeholders on skip."""
+import copy
+import json
 import re
 
 from steps.step8_dashboard.data import DISCLAIMER
@@ -50,3 +52,30 @@ def test_deterministic():
 def test_empty_narrative_shows_placeholder():
     html = render_dashboard(PAYLOAD)
     assert "narrative not generated" in html
+
+
+def test_script_breaking_strings_are_neutralized():
+    payload = copy.deepcopy(PAYLOAD)
+    payload["clusters"][0]["narrative"] = (
+        "Grounded text </script><script>alert(1)</script> more"
+    )
+    html = render_dashboard(payload)
+    clean_html = render_dashboard(PAYLOAD)
+
+    # (a) the breakout sequence must not survive into the HTML
+    assert "</script><script>" not in html
+
+    # (b) no extra </script> tags were introduced - same count as the clean payload
+    assert html.count("</script>") == clean_html.count("</script>")
+
+    # (c) the payload script tag still parses and preserves the narrative verbatim
+    match = re.search(
+        r'<script id="payload" type="application/json">(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    assert match is not None
+    parsed = json.loads(match.group(1))
+    assert parsed["clusters"][0]["narrative"] == (
+        "Grounded text </script><script>alert(1)</script> more"
+    )
