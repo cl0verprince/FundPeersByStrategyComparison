@@ -68,7 +68,14 @@ def get_narratives(cfg: dict, payload_clusters: list, mode: str = "cached",
         client = _get_client(cfg)
         for cluster in missing:
             cached[int(cluster["cluster_id"])] = generate_one(client, cfg, cluster)
-        save_table(pd.DataFrame(
+
+        updated = pd.DataFrame(
             [{"cluster_id": cid, "quarter": quarter, "narrative": text}
-             for cid, text in sorted(cached.items())]), "dashboard_narratives", cfg)
+             for cid, text in sorted(cached.items())])
+        if table_exists("dashboard_narratives", cfg):
+            existing = load_table("dashboard_narratives", cfg)
+            existing = existing[existing["quarter"] != quarter]
+            updated = pd.concat([existing, updated], ignore_index=True)
+        updated = updated.sort_values(["quarter", "cluster_id"]).reset_index(drop=True)
+        save_table(updated, "dashboard_narratives", cfg)
     return cached

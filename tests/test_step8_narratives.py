@@ -48,3 +48,52 @@ def test_cached_mode_fails_loudly_for_missing_cluster_without_llm(cfg, monkeypat
                               "narrative": "other"}]), "dashboard_narratives", cfg)
     with pytest.raises(Exception):   # cluster 3 uncached -> attempts LLM -> connection error
         get_narratives(cfg, [CLUSTER], mode="cached")
+
+
+def test_cache_save_preserves_other_quarters(cfg, monkeypatch):
+    # Seed a prior quarter's row plus a full cache hit for the current quarter/cluster so no
+    # LLM call is needed for the "cached" mode call below.
+    save_table(pd.DataFrame([
+        {"cluster_id": 7, "quarter": "2024q3", "narrative": "Q3 narrative."},
+        {"cluster_id": 3, "quarter": "2024q4", "narrative": "From cache."},
+    ]), "dashboard_narratives", cfg)
+
+    monkeypatch.setenv("LM_STUDIO_BASE_URL", "http://127.0.0.1:1/v1")
+    out = get_narratives(cfg, [CLUSTER], mode="cached", quarter="2024q4")
+    assert out == {3: "From cache."}
+
+    tbl = load_table("dashboard_narratives", cfg)
+    q3_rows = tbl[tbl["quarter"] == "2024q3"]
+    assert len(q3_rows) == 1
+    assert q3_rows.iloc[0]["cluster_id"] == 7
+    assert q3_rows.iloc[0]["narrative"] == "Q3 narrative."
+
+    # Now exercise the actual save path (a cache miss triggers generation + save) without
+    # touching the LLM, and confirm the 2024q3 row still survives.
+    monkeypatch.setattr("steps.step8_dashboard.narratives.generate_one",
+                        lambda client, cfg, cluster: "Regenerated.")
+    out = get_narratives(cfg, [CLUSTER], mode="regenerate", quarter="2024q4")
+    assert out == {3: "Regenerated."}
+
+    tbl = load_table("dashboard_narratives", cfg)
+    q3_rows = tbl[tbl["quarter"] == "2024q3"]
+    assert len(q3_rows) == 1
+    assert q3_rows.iloc[0]["narrative"] == "Q3 narrative."
+    q4_rows = tbl[tbl["quarter"] == "2024q4"]
+    assert len(q4_rows) == 1
+    assert q4_rows.iloc[0]["narrative"] == "Regenerated."
+
+
+def test_regenerate_mode_overwrites_cache(cfg, monkeypatch):
+    save_table(pd.DataFrame([{"cluster_id": 3, "quarter": "2024q4",
+                              "narrative": "OLD"}]), "dashboard_narratives", cfg)
+    monkeypatch.setattr("steps.step8_dashboard.narratives.generate_one",
+                        lambda client, cfg, cluster: "NEW")
+
+    out = get_narratives(cfg, [CLUSTER], mode="regenerate", quarter="2024q4")
+    assert out == {3: "NEW"}
+
+    tbl = load_table("dashboard_narratives", cfg)
+    q4_rows = tbl[tbl["quarter"] == "2024q4"]
+    assert len(q4_rows) == 1
+    assert q4_rows.iloc[0]["narrative"] == "NEW"
