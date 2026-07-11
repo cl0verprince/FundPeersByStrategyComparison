@@ -43,3 +43,54 @@ def test_net_asset_momentum_first_quarter_is_nan():
     assert pd.isna(out.loc[("F", "2024q1"), "net_assets_qoq"])
     assert np.isclose(out.loc[("F", "2024q2"), "net_assets_qoq"], 0.10)
     assert pd.isna(out.loc[("G", "2024q1"), "net_assets_qoq"])
+
+
+def test_net_asset_momentum_nan_mid_series_nulls_two_quarters():
+    # pandas 2+ pct_change (default fill_method=None) computes diff()/shift(1): a NaN
+    # value poisons both the quarter it's in (denominator NaN, from shift) and the
+    # following quarter (numerator NaN, from diff) - on top of the first quarter always
+    # being NaN. So all three quarters end up NaN here, not just the middle one.
+    funds = pd.DataFrame({
+        "series_id": ["F", "F", "F"], "quarter": ["2024q1", "2024q2", "2024q3"],
+        "net_assets": [100.0, float("nan"), 120.0],
+    })
+    out = compute_net_asset_momentum(funds).set_index(["series_id", "quarter"])
+    assert pd.isna(out.loc[("F", "2024q1"), "net_assets_qoq"])
+    assert pd.isna(out.loc[("F", "2024q2"), "net_assets_qoq"])
+    assert pd.isna(out.loc[("F", "2024q3"), "net_assets_qoq"])
+
+
+def test_holdings_features_single_holding_hhi_is_1():
+    h = pd.DataFrame({"series_id": ["F"], "quarter": ["2024q1"], "currency_value": [50.0]})
+    out = compute_holdings_features(h)
+    assert out.iloc[0]["hhi"] == 1.0
+    assert out.iloc[0]["top10_weight"] == 1.0
+    assert out.iloc[0]["n_holdings"] == 1
+
+
+def test_empty_inputs_return_correct_columns():
+    holdings_cols = ["series_id", "quarter", "currency_value"]
+    out_h = compute_holdings_features(pd.DataFrame(columns=holdings_cols))
+    assert out_h.empty
+    assert out_h.columns.tolist() == ["series_id", "quarter", "hhi", "top10_weight", "n_holdings"]
+
+    peers_cols = ["series_id", "quarter", "peer_rank", "peer_series_id", "cosine_similarity"]
+    out_p = compute_peer_similarity_feature(pd.DataFrame(columns=peers_cols), top_n=2)
+    assert out_p.empty
+    assert out_p.columns.tolist() == ["series_id", "quarter", "mean_peer_similarity"]
+
+    funds_cols = ["series_id", "quarter", "net_assets"]
+    out_f = compute_net_asset_momentum(pd.DataFrame(columns=funds_cols))
+    assert out_f.empty
+    assert out_f.columns.tolist() == ["series_id", "quarter", "net_assets_qoq"]
+
+
+def test_net_asset_momentum_duplicate_rows_keep_first():
+    # drop_duplicates(["series_id", "quarter"]) defaults to keep="first", so the 999.0
+    # second observation for 2024q1 is silently dropped and never affects the qoq calc.
+    funds = pd.DataFrame({
+        "series_id": ["F", "F", "F"], "quarter": ["2024q1", "2024q1", "2024q2"],
+        "net_assets": [100.0, 999.0, 110.0],
+    })
+    out = compute_net_asset_momentum(funds).set_index(["series_id", "quarter"])
+    assert np.isclose(out.loc[("F", "2024q2"), "net_assets_qoq"], 0.10)
