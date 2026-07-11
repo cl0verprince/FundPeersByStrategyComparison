@@ -319,8 +319,11 @@ function memberTable(members, withProb) {
   if (withProb) {
     const th = el("th", { class: "num" });
     th.textContent = "Lag prob. ";
-    th.title = "Estimated probability this fund lags its peer group next period. "
-             + "A statistical guess from past data - not advice. See disclaimer.";
+    th.title = "Estimated probability that this fund's total return over the NEXT QUARTER "
+             + "(the quarter after " + DATA.universe.latest_quarter + ") finishes below the "
+             + "median of its 10 most-similar peer funds. One quarter only - says nothing "
+             + "about longer horizons or absolute returns. A statistical estimate from past "
+             + "data - not advice. See disclaimer.";
     const sup = el("sup", { class: "foot" });
     const a = el("a", { href: "#disclaimer", "aria-label": "See disclaimer" });
     a.textContent = "†";
@@ -377,10 +380,13 @@ function renderOverview() {
     "Every fund here is sorted into a peer group of funds that invest alike, based on "
     + "what they actually hold. For each group you can see its typical risk and return, "
     + "its largest shared holdings, and a plain-English summary. Where a fund carries a "
-    + "“lag probability,” that number is an estimated chance the fund trails its "
-    + "peer group over the coming period — a statistical guess from past data, not "
-    + "investment advice, and it can be wrong for any individual fund. Use it to ask "
-    + "questions, not to make decisions.", "lead"));
+    + "“lag probability,” that number is the model's estimated chance that the fund's "
+    + "total return over the next quarter (the quarter after " + DATA.universe.latest_quarter
+    + ", the latest filings here) finishes below the median of its 10 most-similar peer "
+    + "funds. It covers that single quarter only — not longer horizons, and not absolute "
+    + "returns — and it is a statistical estimate from past data, not investment advice; "
+    + "it can be wrong for any individual fund. Use it to ask questions, not to make "
+    + "decisions.", "lead"));
   frag.appendChild(how);
 
   frag.appendChild(renderScorecard());
