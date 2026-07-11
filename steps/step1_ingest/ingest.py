@@ -13,7 +13,7 @@ import requests
 import yfinance as yf
 
 from fundspeers.config import load_env
-from fundspeers.io import raw_dir, save_table
+from fundspeers.io import load_table, raw_dir, save_table, table_exists
 
 log = logging.getLogger(__name__)
 
@@ -229,17 +229,115 @@ def _combine_us_equity_flag(
     return funds_static
 
 
-def run(cfg: dict, exclude_series: set = None, table_suffix: str = "") -> None:
+def _quarter_ordinal(quarter: str) -> int:
+    """Map "YYYYqQ" to a calendar ordinal (year*4 + q-1) so "consecutive" is defined by the
+    calendar, not by which quarters happen to populate a given presence frame. Positional
+    adjacency (index into the sorted-unique list) would silently close a gap when no fund
+    fills the missing quarter; the calendar ordinal can't be gamed - a gap always shows as a
+    jump > 1."""
+    year, q = quarter.split("q")
+    return int(year) * 4 + (int(q) - 1)
+
+
+def derive_relaxed_pool(presence: pd.DataFrame, min_consecutive: int) -> set:
+    """Series present in >= `min_consecutive` CONSECUTIVE calendar quarters (a missing
+    quarter breaks the run). `presence` has columns `series_id, quarter`. This replaces the
+    complete-panel (all-quarters) intersection under relaxed_pool mode: it keeps funds that
+    lived a while and then died mid-window, which the strict filter drops entirely."""
+    pool = set()
+    for series_id, group in presence.groupby("series_id"):
+        ordinals = sorted({_quarter_ordinal(q) for q in group["quarter"]})
+        longest = run = 1 if ordinals else 0
+        for prev, cur in zip(ordinals, ordinals[1:]):
+            run = run + 1 if cur - prev == 1 else 1
+            longest = max(longest, run)
+        if longest >= min_consecutive:
+            pool.add(series_id)
+    return pool
+
+
+_REUSE_METADATA_COLS = ("ticker", "yahoo_category", "yahoo_stock_position")
+
+
+def _reuse_values_equal(a, b) -> bool:
+    """NaN-safe equality: a missing yahoo_category (NaN) in both tables is NOT a conflict
+    (naive `NaN != NaN` would report one)."""
+    if pd.isna(a) and pd.isna(b):
+        return True
+    return a == b
+
+
+def _build_metadata_reuse_map(funds_frames: list) -> dict:
+    """Build series_id -> {ticker, yahoo_category, yahoo_stock_position} from prior `funds`
+    tables, in priority order: the FIRST table wins on conflict. Only Yahoo-sourced fields
+    are reused (is_us_equity is recomputed from current holdings downstream). Funds tables
+    carry one row per (series_id, quarter); the Yahoo fields are static per series, so we
+    dedupe to first row per series. Logs the count of series that disagreed across tables."""
+    result = {}
+    conflicts = 0
+    for frame in funds_frames:
+        if frame.empty:
+            continue
+        per_series = frame.drop_duplicates("series_id", keep="first")
+        for _, row in per_series.iterrows():
+            series_id = row["series_id"]
+            entry = {col: row[col] for col in _REUSE_METADATA_COLS}
+            if series_id in result:
+                if any(not _reuse_values_equal(result[series_id][col], entry[col])
+                       for col in _REUSE_METADATA_COLS):
+                    conflicts += 1
+                # first table wins - keep the existing entry
+            else:
+                result[series_id] = entry
+    if conflicts:
+        log.info(f"metadata reuse: {conflicts} series had conflicting Yahoo values across "
+                 f"tables (first table wins)")
+    return result
+
+
+def run(
+    cfg: dict,
+    exclude_series: set = None,
+    table_suffix: str = "",
+    relaxed_pool: bool = False,
+    reuse_metadata_from: list = None,
+    max_funds_override: int = None,
+) -> None:
     """`exclude_series` and `table_suffix` (both default to the original behavior) let a
     second call sample a genuinely disjoint fund set into a parallel table namespace - see
     steps/step6_out_of_sample/design.md. Passing exclude_series does NOT change the shuffle
     order of the remaining candidates (the same full candidate list is shuffled with the same
     seed either way) - excluded ids are simply skipped during iteration, so a fresh run's
-    candidate order for the non-excluded funds is bit-identical to the original run's."""
+    candidate order for the non-excluded funds is bit-identical to the original run's.
+
+    step10 extensions, all defaulting to today's exact behavior:
+    - `relaxed_pool=True` swaps the strict complete-panel (all-quarters) intersection for
+      `derive_relaxed_pool` (>= `cfg["full"]["min_consecutive_quarters"]` consecutive
+      quarters), which retains funds that died mid-window.
+    - `reuse_metadata_from=["funds", ...]` builds a series -> Yahoo-metadata map from those
+      prior tables and short-circuits the network for any series it covers (NO Yahoo call for
+      a reused series). Only Yahoo-sourced fields are reused; `is_us_equity` is still
+      recomputed from this run's holdings via `_combine_us_equity_flag`.
+    - `max_funds_override=0` means UNCAPPED (attempt every candidate in the pool); a positive
+      value overrides the cfg cap; None keeps the cfg-driven cap."""
     exclude_series = exclude_series or set()
     quarters = cfg["data"]["quarters"]
-    max_funds = cfg["data"]["max_funds"]
     stock_position_min = cfg["data"]["equity_stock_position_min"]
+
+    if max_funds_override is None:
+        max_funds, uncapped = cfg["data"]["max_funds"], False
+    elif max_funds_override == 0:
+        max_funds, uncapped = None, True
+    else:
+        max_funds, uncapped = max_funds_override, False
+    max_funds_display = "uncapped" if uncapped else max_funds
+
+    reuse_map = {}
+    if reuse_metadata_from:
+        reuse_frames = [load_table(t, cfg) for t in reuse_metadata_from if table_exists(t, cfg)]
+        reuse_map = _build_metadata_reuse_map(reuse_frames)
+        log.info(f"metadata reuse: {len(reuse_map)} series covered by "
+                 f"{reuse_metadata_from} - these skip Yahoo entirely")
 
     # Stage 1-2: fund-level + returns tables, all quarters (small tables).
     fund_level_by_quarter = {}
@@ -253,12 +351,25 @@ def run(cfg: dict, exclude_series: set = None, table_suffix: str = "") -> None:
 
     monthly_returns = pd.concat(returns_frames, ignore_index=True)
 
-    # Stage 3: panel filter - series present in every configured quarter.
-    series_per_quarter = [
-        set(frame["SERIES_ID"].dropna()) for frame in fund_level_by_quarter.values()
-    ]
-    complete_panel_series = sorted(set.intersection(*series_per_quarter))
-    log.info(f"{len(complete_panel_series)} series present in all {len(quarters)} quarters")
+    # Stage 3: panel filter. Default is the strict complete-panel (present in EVERY
+    # configured quarter) intersection - untouched. relaxed_pool swaps in the >=N-consecutive
+    # rule so funds that died mid-window are retained (see derive_relaxed_pool).
+    if relaxed_pool:
+        presence = pd.concat(
+            [pd.DataFrame({"series_id": frame["SERIES_ID"].dropna().unique(), "quarter": q})
+             for q, frame in fund_level_by_quarter.items()],
+            ignore_index=True,
+        )
+        min_consecutive = cfg["full"]["min_consecutive_quarters"]
+        complete_panel_series = sorted(derive_relaxed_pool(presence, min_consecutive))
+        log.info(f"{len(complete_panel_series)} series present in >= {min_consecutive} "
+                 f"consecutive quarters (relaxed pool)")
+    else:
+        series_per_quarter = [
+            set(frame["SERIES_ID"].dropna()) for frame in fund_level_by_quarter.values()
+        ]
+        complete_panel_series = sorted(set.intersection(*series_per_quarter))
+        log.info(f"{len(complete_panel_series)} series present in all {len(quarters)} quarters")
 
     # Stage 4-6: shuffle the full candidate pool deterministically, then resolve
     # ticker + Yahoo data one candidate at a time until `max_funds` are resolved
@@ -276,18 +387,27 @@ def run(cfg: dict, exclude_series: set = None, table_suffix: str = "") -> None:
     funds_rows = []
     attempted = 0
     for series_id in candidate_order:
-        if len(funds_rows) >= max_funds:
+        if not uncapped and len(funds_rows) >= max_funds:
             break
         if series_id in exclude_series:
             continue
         attempted += 1
-        ticker = series_to_ticker.get(series_id)
-        if not ticker:
-            continue
-        yahoo = _fetch_yahoo_fund_data(ticker, cfg)
-        if yahoo is None or yahoo["yahoo_stock_position"] is None:
-            log.info(f"{series_id} ({ticker}): yahoo lookup failed, dropping from universe")
-            continue
+        reused = reuse_map.get(series_id)
+        if reused is not None:
+            # Covered by a prior funds table: reuse its Yahoo fields, make NO network call.
+            ticker = reused["ticker"]
+            yahoo = {
+                "yahoo_category": reused["yahoo_category"],
+                "yahoo_stock_position": reused["yahoo_stock_position"],
+            }
+        else:
+            ticker = series_to_ticker.get(series_id)
+            if not ticker:
+                continue
+            yahoo = _fetch_yahoo_fund_data(ticker, cfg)
+            if yahoo is None or yahoo["yahoo_stock_position"] is None:
+                log.info(f"{series_id} ({ticker}): yahoo lookup failed, dropping from universe")
+                continue
         funds_rows.append({
             "series_id": series_id,
             "ticker": ticker,
@@ -296,7 +416,7 @@ def run(cfg: dict, exclude_series: set = None, table_suffix: str = "") -> None:
             "yahoo_is_equity": yahoo["yahoo_stock_position"] >= stock_position_min,
         })
         if len(funds_rows) % 50 == 0:
-            log.info(f"resolved {len(funds_rows)}/{max_funds} funds "
+            log.info(f"resolved {len(funds_rows)}/{max_funds_display} funds "
                      f"({attempted} candidates attempted so far)")
 
     funds_static = pd.DataFrame(funds_rows)
@@ -304,7 +424,7 @@ def run(cfg: dict, exclude_series: set = None, table_suffix: str = "") -> None:
              f"({len(candidate_order)} candidates available) in {time.time() - t_yahoo_start:.1f}s; "
              f"{funds_static['yahoo_is_equity'].sum()} flagged equity (asset-class only, "
              f"geography resolved from holdings below)")
-    if len(funds_static) < max_funds:
+    if not uncapped and len(funds_static) < max_funds:
         log.warning(
             f"only resolved {len(funds_static)} funds, short of the {max_funds} target "
             f"- the candidate pool ({len(candidate_order)}) was exhausted"
