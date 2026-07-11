@@ -95,3 +95,39 @@ lists ≈ low single-digit MB of embedded JSON — fine for a single offline HTM
   (spot-check 3 clusters); `--skip-narratives` build renders placeholders and is otherwise
   identical.
 - Two consecutive builds from the same tables produce byte-identical output.
+
+## UAT results
+
+Built `python -m steps.step8_dashboard.build` against the live step7 DuckDB on
+2026-07-11. First run generated all 30 per-cluster phi-4 narratives (temperature 0)
+into a new `dashboard_narratives` table; output `reports/cluster_dashboard.html` is
+0.80 MB, 30 clusters, 2,243 funds. Browser UAT (Playwright, served offline over
+`python -m http.server`) — every acceptance item **passed**:
+
+- **Structure** — all 30 cluster sections render (identity, stat tiles, top-holdings
+  bars, narrative, member table); each member table carries the `Lag prob.` column with
+  the disclaimer dagger (†) linking to the footer. Cluster index lists 30 rows with a
+  colour swatch each (it doubles as the map legend).
+- **Allocation** — shown separately, grouped into 9 vintages (Target-Date 2040–2065+ and
+  three Allocation-by-equity bands), descriptive only, no probability column.
+- **Interactivity** — fund search matches on both name and ticker (e.g. `DFSTX` → 1 hit);
+  column sort works ascending and descending, nulls last; the similarity scatter draws
+  2,086 dots and the nearest-point hover tooltip shows fund name · ticker · cluster
+  short_title.
+- **Disclaimer** — fixed footer always visible; every probability column header carries
+  the note/dagger.
+- **Scorecard** — AUC **0.717**, 95% CI **0.703–0.729**; random baseline stated as the
+  0.50 coin-flip; persistence baseline **0.285**, correctly read as mean-reverting with
+  the honest reversed-rule bar of **0.715**; significance sentence P(edge≤0)=**0.0%**;
+  per-quarter AUC range **0.632–0.763** across 3 quarters; label-stability sentence at
+  **8.2%** flip rate.
+- **Narrative grounding** — spot-checked clusters 0 (Concentrated Small Blend), 14
+  (Leaning Large Blend), 29 (Leaning Equity Energy): every number, holding and fund named
+  traces to that cluster's grounding payload; no invented facts (only benign LLM rounding,
+  e.g. 0.45% → 0.5%).
+- **Offline** — a single network request (the HTML file itself); no CDN/font/external host.
+- **`--skip-narratives`** — rebuild emits empty narratives (client-side "narrative not
+  generated" placeholder) and is otherwise identical.
+- **Determinism** — the full build, a from-cache rebuild after `--skip-narratives`, and a
+  third rebuild all hash identically (sha256 `4f83b11f…`): narratives come from the cache
+  table, everything else is a pure function of the step7 tables.

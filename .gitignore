@@ -45,3 +45,7 @@ DUCKDB_GUIDE.md
 
 # Downloaded third-party tools (not part of the codebase)
 duckdb_cli-windows-amd64/
+
+# Browser-verification scratch (Playwright MCP snapshots/screenshots)
+.playwright-mcp/
+uat_overview.png
