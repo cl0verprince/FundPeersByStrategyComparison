@@ -76,6 +76,36 @@ numbers).
 - New `full`: `{ "min_consecutive_quarters": 6, "namespace": "_full" }`.
 - `unified.*` unchanged (k re-check may amend `n_clusters` for `_full` — recorded here).
 
+## Pool amendment (2026-07-11)
+The `_full` ingestion ran to completion (attempt 2, 4,247s ≈ 71 min; resolution phase
+3,735s). An earlier identical attempt was externally killed at 12,702/12,871 candidates
+before anything was saved (no traceback — the harness stopped the background task); the
+rerun was launched as a detached process and, being idempotent, reproduced the identical
+candidate order (same seed). Log: `.superpowers/sdd/step10-ingest.log`.
+
+- **Relaxed pool: 12,871 series** (≥6 consecutive calendar quarters within 2022q1–2026q1)
+  — vs 9,445 under the old all-12-quarters rule, confirming the relaxed rule enlarges.
+- **Attempted: 12,871 (100% — uncapped, every candidate).**
+- **Resolved: 8,766 (68.1%)** — 6,000 via metadata reuse + 2,766 new via Yahoo (of the
+  6,871 new candidates; the ~60% new-candidate attrition = missing current-ticker-map
+  entries + Yahoo misses; 536 unique tickers had failed lookups, all permanent-miss or
+  transient-exhausted).
+- **Equity-flagged: 5,203** by Yahoo asset class; **3,231 final `is_us_equity`** after the
+  holdings US-share ≥ 0.70 geography check.
+- **Segment split (per `assign_segment` on yahoo_category):** all resolved: 8,062 strategy
+  / 704 allocation; within US-equity: 3,035 strategy / 196 allocation.
+- **Dead funds: 611** series whose last filed quarter < 2026q1 — the relaxed rule is
+  biting (these were impossible under the strict rule); their final quarters are in the
+  panel.
+- **Metadata-reuse hit-rate: 100%.** All 6,000 series known from `funds`/`funds_oos`/
+  `funds_oos2` appear in `funds_full` with reused Yahoo fields and made ZERO Yahoo calls
+  (verified: the failed-lookup ticker set from the log has empty intersection with the
+  6,000 known tickers, and the 62-min resolution wall time is only consistent with ~6.9k
+  network lookups, not 12.9k).
+- **Tables saved:** `funds_full` 137,544 rows; `holdings_full` 46,405,028 rows;
+  `monthly_returns_full` 412,632 rows (17 quarters, 2022q1–2026q1; per-quarter filings
+  ranged 11,470–12,553).
+
 ## UAT (acceptance)
 - New pool size under the relaxed rule recorded; 100% of candidates attempted; resolution,
   equity-flag, and segment counts reported; metadata reuse confirmed (zero repeat Yahoo
