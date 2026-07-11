@@ -83,6 +83,15 @@ def compute_purity(cluster_labels: pd.Series, true_labels: pd.Series) -> float:
     return majority_counts.sum() / total
 
 
+def _filter_universe(funds: pd.DataFrame, require_segment) -> set:
+    """The set of series_ids to embed/cluster: US-equity, optionally one segment only
+    (step7's merged universe excludes 'allocation' fund-of-funds from strategy clustering)."""
+    universe = funds[funds["is_us_equity"]]
+    if require_segment is not None:
+        universe = universe[universe["segment"] == require_segment]
+    return set(universe["series_id"].unique())
+
+
 def get_peers(series_id: str, quarter: str, cfg: dict) -> pd.DataFrame:
     """Return the top-N cosine-similarity peers (with cluster id) for a fund in a quarter."""
     peers = load_table("fund_peers", cfg)
@@ -98,13 +107,18 @@ def get_peers(series_id: str, quarter: str, cfg: dict) -> pd.DataFrame:
 
 def _plot_cluster_map(vectors: pd.DataFrame, cluster_labels: pd.Series, quarter: str,
                        seed: int, cfg: dict, table_suffix: str = "",
-                       cluster_names: dict = None) -> None:
+                       cluster_names: dict = None) -> pd.DataFrame:
     """`cluster_names` (cluster_id -> short_title, e.g. "Leaning Large Blend") replaces a
     plain numeric cluster_id colorbar with a readable legend - one scatter series per
     cluster so matplotlib's legend can show the allocation-based name, not just an arbitrary
-    integer. Falls back to "cluster N" if no names are given."""
+    integer. Falls back to "cluster N" if no names are given. Returns the PCA coordinates it
+    computes (series_id, x, y, cluster_id) so callers can persist them (step8 dashboard)."""
     pca = PCA(n_components=2, random_state=seed)
     coords = pca.fit_transform(vectors.values)
+    coords_df = pd.DataFrame({
+        "series_id": vectors.index, "x": coords[:, 0], "y": coords[:, 1],
+        "cluster_id": cluster_labels.values,
+    })
     fig, ax = plt.subplots(figsize=(10, 6))
     cmap = plt.get_cmap("tab20")
     for i, cluster_id in enumerate(sorted(cluster_labels.unique())):
@@ -119,22 +133,28 @@ def _plot_cluster_map(vectors: pd.DataFrame, cluster_labels: pd.Series, quarter:
     fig.savefig(out_path, dpi=120, bbox_inches="tight")
     plt.close(fig)
     log.info(f"wrote {out_path}")
+    return coords_df
 
 
-def run(cfg: dict, table_suffix: str = "") -> None:
+def run(cfg: dict, table_suffix: str = "", n_clusters=None, top_n_peers=None,
+        require_segment=None, save_coords: bool = False) -> None:
     """`table_suffix` (defaults to the original behavior) lets this run against a parallel,
     disjoint fund set (e.g. "_oos") without touching the original tables - see
-    steps/step6_out_of_sample/design.md."""
+    steps/step6_out_of_sample/design.md.
+    step7's merged-universe run passes n_clusters/top_n_peers overrides, require_segment
+    ("strategy": exclude allocation fund-of-funds), and save_coords (persist the latest
+    quarter's PCA coordinates for the step8 dashboard) - all defaults preserve the exact
+    original behavior."""
     seed = cfg["seed"]
-    n_clusters = cfg["similarity"]["n_clusters"]
-    top_n_peers = cfg["similarity"]["top_n_peers"]
+    n_clusters = n_clusters if n_clusters is not None else cfg["similarity"]["n_clusters"]
+    top_n_peers = top_n_peers if top_n_peers is not None else cfg["similarity"]["top_n_peers"]
     embedding_model = cfg["similarity"]["embedding_model"]
     top_holdings = cfg["similarity"]["top_holdings_for_description"]
 
     funds = load_table(f"funds{table_suffix}", cfg)
     holdings = load_table(f"holdings{table_suffix}", cfg)
 
-    equity_series = set(funds.loc[funds["is_us_equity"], "series_id"].unique())
+    equity_series = _filter_universe(funds, require_segment)
     equity_accessions = set(
         funds.loc[funds["series_id"].isin(equity_series), "accession_number"]
     )
@@ -204,7 +224,10 @@ def run(cfg: dict, table_suffix: str = "") -> None:
     })
     dominant_info = compute_dominant_category_info(latest_cluster_assignments, category_by_series)
     cluster_names = dict(zip(dominant_info["cluster_id"], dominant_info["short_title"]))
-    _plot_cluster_map(latest_vectors, latest_labels, quarters[-1], seed, cfg, table_suffix, cluster_names)
+    coords_df = _plot_cluster_map(latest_vectors, latest_labels, quarters[-1], seed, cfg,
+                                  table_suffix, cluster_names)
+    if save_coords:
+        save_table(coords_df, f"cluster_map_coords{table_suffix}", cfg)
 
     mean_purity = pd.DataFrame(validation_rows)["purity"].mean()
     mean_ari = pd.DataFrame(validation_rows)["adjusted_rand_index"].mean()
