@@ -40,6 +40,13 @@
       "min_samples_leaf": 10
     }
   },
+  "unified": {
+    "n_clusters": 30,
+    "peer_label_top_n": 10,
+    "min_valid_peers_for_label": 5,
+    "bootstrap_iterations": 2000,
+    "label_stability_draws": 100
+  },
   "llm": {
     "model_name": "phi-4",
     "temperature": 0,
