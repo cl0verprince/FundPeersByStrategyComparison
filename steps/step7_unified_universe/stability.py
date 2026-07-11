@@ -28,8 +28,6 @@ def compute_label_flip_rates(fund_peers: pd.DataFrame, quarterly_returns: pd.Dat
         columns={"series_id": "peer_series_id", "quarter": "next_quarter",
                  "quarterly_return": "peer_return_next"})
     pool = pool.merge(ret_next, on=["peer_series_id", "next_quarter"], how="left")
-    own_next = quarterly_returns.rename(
-        columns={"quarter": "next_quarter", "quarterly_return": "own_return_next"})
 
     rows = []
     for (series_id, quarter), g in pool.groupby(["series_id", "quarter"]):
@@ -54,21 +52,22 @@ def compute_label_flip_rates(fund_peers: pd.DataFrame, quarterly_returns: pd.Dat
     return pd.DataFrame(rows, columns=["series_id", "quarter", "flip_rate"])
 
 
-def run_stability(cfg: dict) -> dict:
-    funds = load_table("funds_all", cfg)
+def run_stability(cfg: dict, table_suffix: str = "_all", output_table: str = None) -> dict:
+    output_table = output_table or "unified_label_stability"
+    funds = load_table(f"funds{table_suffix}", cfg)
     strategy_series = set(funds.loc[funds["is_us_equity"]
                                     & (funds["segment"] == "strategy"), "series_id"])
-    monthly = load_table("monthly_returns_all", cfg)
+    monthly = load_table(f"monthly_returns{table_suffix}", cfg)
     quarterly_returns = _quarterly_returns_from_monthly(
         monthly[monthly["series_id"].isin(strategy_series)])
-    fund_peers = load_table("fund_peers_all", cfg)
+    fund_peers = load_table(f"fund_peers{table_suffix}", cfg)
     quarters_ordered = sorted(funds.loc[funds["series_id"].isin(strategy_series), "quarter"].unique())
 
     flips = compute_label_flip_rates(
         fund_peers, quarterly_returns, quarters_ordered,
         top_n=cfg["unified"]["peer_label_top_n"], pool_size=12, draw_size=8,
         draws=cfg["unified"]["label_stability_draws"], seed=cfg["seed"])
-    save_table(flips, "unified_label_stability", cfg)
+    save_table(flips, output_table, cfg)
     summary = {
         "mean_flip_rate": float(flips["flip_rate"].mean()),
         "share_flip_gt_10pct": float((flips["flip_rate"] > 0.10).mean()),

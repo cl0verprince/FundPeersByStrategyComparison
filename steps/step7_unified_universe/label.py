@@ -20,6 +20,11 @@ def compute_peer_labels(fund_peers: pd.DataFrame, quarterly_returns: pd.DataFram
     """One row per (series_id, quarter) present in fund_peers. Label is pd.NA when the
     fund's own Q+1 return is missing, fewer than min_valid_peers peers have a valid Q+1
     return, or Q is the last quarter (those rows are the forward-prediction set - kept)."""
+    n_dup = int(quarterly_returns.duplicated(["series_id", "quarter"]).sum())
+    if n_dup:
+        raise ValueError(
+            f"quarterly_returns must be unique on (series_id, quarter); "
+            f"found {n_dup} duplicate row(s)")
     quarter_to_next = dict(zip(quarters_ordered[:-1], quarters_ordered[1:]))
     peers = fund_peers[fund_peers["peer_rank"] <= top_n].copy()
     peers["next_quarter"] = peers["quarter"].map(quarter_to_next)

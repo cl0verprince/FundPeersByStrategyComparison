@@ -47,11 +47,14 @@ def fund_clustered_bootstrap(test: pd.DataFrame, y_col: str, model_score_col: st
     }
 
 
-def train_and_evaluate(cfg: dict) -> dict:
-    labeled, forward, feature_cols = assemble_unified_panel(cfg)
+def train_and_evaluate(cfg: dict, table_suffix: str = "_all", holdout_transitions=None,
+                       output_prefix: str = "unified") -> dict:
+    if holdout_transitions is None:
+        holdout_transitions = cfg["model"]["test_transitions_holdout"]
+    labeled, forward, feature_cols = assemble_unified_panel(cfg, table_suffix=table_suffix)
     quarters_ordered = sorted(set(labeled["quarter"]) | set(forward["quarter"]))
     train, test, train_q, test_q = time_based_split(
-        labeled, quarters_ordered, cfg["model"]["test_transitions_holdout"])
+        labeled, quarters_ordered, holdout_transitions)
     if max(train_q) >= min(test_q):
         raise RuntimeError(f"split leaks: train up to {max(train_q)}, test from {min(test_q)}")
 
@@ -76,10 +79,12 @@ def train_and_evaluate(cfg: dict) -> dict:
         {"metric": "auc_random_baseline", "quarter": "", "value": 0.5},
     ]
     quarters_model_wins = 0
+    quarters_comparable = 0
     for q, g in test.groupby("quarter"):
         yq = g["underperform_next_quarter"].astype(int)
         if yq.nunique() < 2:
             continue
+        quarters_comparable += 1
         auc_q = roc_auc_score(yq, g["proba"])
         persist_q = roc_auc_score(yq, g["persist"])
         quarters_model_wins += int(auc_q > persist_q)
@@ -93,14 +98,20 @@ def train_and_evaluate(cfg: dict) -> dict:
 
     label_definition = LABEL_DEFINITION.format(top_n=cfg["unified"]["peer_label_top_n"])
     save_model({"model": rf, "feature_cols": feature_cols,
-                "label_definition": label_definition}, "unified_rf_model", cfg)
+                "label_definition": label_definition}, f"{output_prefix}_rf_model", cfg)
 
-    predictions = pd.concat([
+    prediction_frames = [
         train.assign(split="train", predicted_probability=rf.predict_proba(x_train)[:, 1]),
         test.assign(split="test", predicted_probability=test["proba"]),
-        forward.assign(split="forward",
-                       predicted_probability=rf.predict_proba(forward[feature_cols])[:, 1]),
-    ])[["series_id", "quarter", "predicted_probability", "underperform_next_quarter", "split"]]
+    ]
+    if len(forward):
+        prediction_frames.append(forward.assign(
+            split="forward",
+            predicted_probability=rf.predict_proba(forward[feature_cols])[:, 1]))
+    else:
+        log.info("no forward rows to predict; skipping forward prediction block")
+    predictions = pd.concat(prediction_frames)[
+        ["series_id", "quarter", "predicted_probability", "underperform_next_quarter", "split"]]
     predictions = predictions.rename(columns={"underperform_next_quarter": "actual_label"})
     predictions["actual_label"] = predictions["actual_label"].astype("float")  # NA-safe for duckdb
 
@@ -108,15 +119,17 @@ def train_and_evaluate(cfg: dict) -> dict:
                                 "importance": rf.feature_importances_}
                                ).sort_values("importance", ascending=False)
 
-    save_table(pd.concat([labeled, forward], ignore_index=True), "unified_panel", cfg)
-    save_table(predictions, "unified_predictions", cfg)
-    save_table(importances, "unified_feature_importances", cfg)
-    save_table(pd.DataFrame(eval_rows), "unified_model_eval", cfg)
+    save_table(pd.concat([labeled, forward], ignore_index=True), f"{output_prefix}_panel", cfg)
+    save_table(predictions, f"{output_prefix}_predictions", cfg)
+    save_table(importances, f"{output_prefix}_feature_importances", cfg)
+    save_table(pd.DataFrame(eval_rows), f"{output_prefix}_model_eval", cfg)
 
     log.info(f"unified RF: pooled test AUC={pooled_auc:.3f} "
              f"[{boot['auc_ci_low']:.3f}, {boot['auc_ci_high']:.3f}] vs persistence "
              f"{persistence_auc:.3f}; edge CI [{boot['edge_ci_low']:.3f}, "
              f"{boot['edge_ci_high']:.3f}], p(edge<=0)={boot['p_edge_le_zero']:.4f}; "
-             f"model beat persistence in {quarters_model_wins}/{len(test_q)} test quarters")
+             f"model beat persistence in {quarters_model_wins}/{quarters_comparable} "
+             f"comparable test quarters")
     return {"auc": pooled_auc, "persistence_auc": persistence_auc,
-            "quarters_model_wins": quarters_model_wins, "n_test_quarters": len(test_q), **boot}
+            "quarters_model_wins": quarters_model_wins, "n_test_quarters": len(test_q),
+            "n_quarters_comparable": quarters_comparable, **boot}

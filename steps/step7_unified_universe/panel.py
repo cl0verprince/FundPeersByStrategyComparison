@@ -7,6 +7,7 @@ form the FORWARD set (label unknowable yet - the dashboard's genuine forward pre
 """
 import logging
 
+import numpy as np
 import pandas as pd
 
 from fundspeers.category import category_tier
@@ -28,7 +29,6 @@ BASE_FEATURE_COLS = [
 def _quarterly_returns_from_monthly(monthly_returns: pd.DataFrame) -> pd.DataFrame:
     """Compound each (series_id, quarter)'s 3 monthly returns; .values so a missing month
     correctly propagates NaN (the step3 np.prod-skipna bug, not repeated here)."""
-    import numpy as np
     df = monthly_returns.copy()
     df["r"] = df["total_return"] / 100.0
     df = df.sort_values(["series_id", "quarter", "month_in_quarter"])
@@ -37,11 +37,11 @@ def _quarterly_returns_from_monthly(monthly_returns: pd.DataFrame) -> pd.DataFra
     return grouped.reset_index().rename(columns={"r": "quarterly_return"})
 
 
-def assemble_unified_panel(cfg: dict):
-    funds = load_table("funds_all", cfg)
-    monthly_returns = load_table("monthly_returns_all", cfg)
-    holdings = load_table("holdings_all", cfg)
-    fund_peers = load_table("fund_peers_all", cfg)
+def assemble_unified_panel(cfg: dict, table_suffix: str = "_all"):
+    funds = load_table(f"funds{table_suffix}", cfg)
+    monthly_returns = load_table(f"monthly_returns{table_suffix}", cfg)
+    holdings = load_table(f"holdings{table_suffix}", cfg)
+    fund_peers = load_table(f"fund_peers{table_suffix}", cfg)
 
     strategy = funds[funds["is_us_equity"] & (funds["segment"] == "strategy")]
     strategy_series = set(strategy["series_id"].unique())
