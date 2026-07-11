@@ -29,9 +29,13 @@ liability disclaimer alongside every prediction.
 - "How to read this" — plain-English method summary: grouped by *what funds actually
   hold* (regulatory filings), not by marketing labels; ~200 words, no jargon.
 - **Model scorecard** — the honest frame for every probability shown deeper in: pooled
-  test AUC vs the random and persistence baselines, per-quarter AUC range plotted, and a
-  short "what this number is and isn't" paragraph (a probability of lagging peers, not a
-  return forecast; measured on past data; can be wrong).
+  test AUC **with its 95% bootstrap CI** vs the random and persistence baselines,
+  whether the edge over the naive persistence rule is statistically distinguishable
+  (from step7's paired bootstrap, stated in plain English either way), the per-quarter
+  AUC range plotted, the label-stability context sentence ("peer benchmarks themselves
+  wobble - X% of labels flip under small peer-set changes"), and a short "what this
+  number is and isn't" paragraph (a probability of lagging peers, not a return forecast;
+  measured on past data; can be wrong).
 
 ### 2. Cluster index
 - Sortable/filterable table of the 30 strategy clusters: short_title, member count,
@@ -85,7 +89,8 @@ lists ≈ low single-digit MB of embedded JSON — fine for a single offline HTM
   allocation segment renders grouped by vintage.
 - Sorting, filtering, and fund search work; cluster-map hover shows fund name/ticker.
 - Every probability display has the disclaimer note; the footer disclaimer is always
-  visible; the model scorecard shows AUC vs both baselines and the per-quarter range.
+  visible; the model scorecard shows AUC with its CI vs both baselines, the
+  significance-of-edge statement, the label-stability sentence, and the per-quarter range.
 - Narratives: each cluster's paragraph mentions only facts present in its grounding data
   (spot-check 3 clusters); `--skip-narratives` build renders placeholders and is otherwise
   identical.

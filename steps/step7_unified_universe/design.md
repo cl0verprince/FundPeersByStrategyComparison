@@ -128,6 +128,31 @@ importances. One-time sanity check, recorded here for the design record: the old
 cluster-median label with scaled clusters (approach B) is run once on the merged universe
 to confirm granularity was really the driver, then not maintained.
 
+### 6b. Monte Carlo uncertainty layer (not a simulator of fund futures)
+Considered and deliberately scoped: Monte Carlo is NOT used to simulate fund returns —
+that would require assuming a return-generating process (plus peer correlations, since the
+label is cross-sectional), replacing measured patterns with assumed ones. It IS used as
+the honesty machinery around the evaluation, three ways, all seeded and deterministic:
+
+1. **Fund-clustered bootstrap CI on the pooled test AUC**: resample test-set *funds* with
+   replacement (keeping each drawn fund's quarters together, since a fund's rows
+   correlate), recompute AUC per resample (no refitting), report the 95% interval
+   alongside the point estimate. With only 3 test quarters, a point AUC alone overstates
+   precision.
+2. **Paired bootstrap significance of the edge over persistence**: on the *same* resamples,
+   compute (model AUC − persistence AUC); report the CI of the difference and the fraction
+   of resamples where the edge ≤ 0 (a one-sided p-value). Directly answers the skeptic's
+   question: is the model's edge over the naive rule statistically real?
+3. **Label-stability perturbation study**: the label depends on the top-10 peer choice, so
+   for each fund-quarter, draw many perturbed peer sets (random 8 of the top 12 by cosine)
+   and measure how often the underperform label flips. The flip rate estimates the label's
+   intrinsic noise floor — context for how much AUC is achievable at all, and a guard
+   against chasing model improvements into pure label noise.
+
+Outputs land in `unified_model_eval` (AUCs, CI bounds, edge-vs-persistence p) and
+`unified_label_stability` (flip-rate distribution summary). Config: `unified.bootstrap_iterations`
+(2000) and `unified.label_stability_draws` (100).
+
 ### 7. Persistence and naming
 The new model is saved as `models/unified_rf_model.joblib` (bundle: model + feature_cols
 + label definition metadata). `models/random_forest_model.joblib` (the promoted 754-fund,
@@ -146,7 +171,9 @@ pipeline later, wiring it into the conductor is its own explicit decision.
 "unified": {
   "n_clusters": 30,
   "peer_label_top_n": 10,
-  "min_valid_peers_for_label": 5
+  "min_valid_peers_for_label": 5,
+  "bootstrap_iterations": 2000,
+  "label_stability_draws": 100
 }
 ```
 
@@ -161,6 +188,10 @@ pipeline later, wiring it into the conductor is its own explicit decision.
   persistence baseline's AUC, AND above persistence in a majority of individual test
   quarters (so one lucky quarter can't carry the claim); per-quarter AUCs reported with
   the spread stated honestly.
+- Uncertainty layer reported honestly whichever way it comes out: 95% bootstrap CI on the
+  pooled test AUC, CI + one-sided p for the edge over persistence, and the label
+  flip-rate summary from the peer-perturbation study. (These are reporting criteria, not
+  pass/fail thresholds — a not-significant edge is a finding, not a UAT failure.)
 - Model round-trip: reloaded `unified_rf_model.joblib` reproduces in-memory predictions.
 - `unified_predictions` includes a genuine forward prediction set (2024q4 features →
   2025q1, unlabeled) for the dashboard.
