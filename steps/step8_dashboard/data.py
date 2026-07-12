@@ -48,17 +48,57 @@ def _top_holdings_for(members, latest_quarter, funds, holdings, top_n=10):
             for issuer, w in avg.head(top_n).items()]
 
 
-def build_payload(cfg: dict, narratives: dict) -> dict:
-    funds = load_table("funds_all", cfg)
-    metrics_overall = load_table("fund_metrics_overall_all", cfg).set_index("series_id")
-    clusters_tbl = load_table("fund_clusters_all", cfg)
-    definitions = load_table("cluster_definitions_all", cfg)
-    holdings = load_table("holdings_all", cfg)
-    model_eval = load_table("unified_model_eval", cfg)
-    coords = load_table("cluster_map_coords_all", cfg)
-    predictions = load_table("unified_predictions", cfg)
-    stability = (load_table("unified_label_stability", cfg)
-                 if table_exists("unified_label_stability", cfg) else pd.DataFrame(
+def _read_oot_validation(cfg: dict, oot_table: str = "oot_validation") -> dict:
+    """Optional out-of-time scorecard fields, read from the long-format `oot_validation`
+    table written by steps/step10_full_universe/build.py::_write_oot_validation (columns
+    metric/quarter/value/source). Absent table -> every key present with None, so the
+    payload schema is identical whether or not step10 has been run; the renderer decides
+    per-field whether to show anything.
+
+    The metric name "auc" appears under BOTH sources, so every lookup filters on `source`
+    (and quarter) to disambiguate: published-forward auc is quarter="", frozen per-quarter
+    aucs are quarter!="", and the frozen pooled score has its own distinct metric name.
+    """
+    keys = {"oot_published_auc": None, "oot_published_n_scored": None,
+            "oot_published_base_rate": None, "oot_frozen_pooled_auc": None,
+            "oot_frozen_per_quarter": None}
+    if not table_exists(oot_table, cfg):
+        return keys
+    oot = load_table(oot_table, cfg)
+
+    def val(source, metric, quarter=""):
+        row = oot[(oot["source"] == source) & (oot["metric"] == metric)
+                  & (oot["quarter"] == quarter)]
+        return _none_if_na(row["value"].iloc[0]) if len(row) else None
+
+    keys["oot_published_auc"] = val("published_forward", "auc")
+    n_scored = val("published_forward", "n_scored")
+    keys["oot_published_n_scored"] = int(n_scored) if n_scored is not None else None
+    keys["oot_published_base_rate"] = val("published_forward", "base_rate")
+    keys["oot_frozen_pooled_auc"] = val("frozen_rolled_forward", "auc_pooled")
+    pq = oot[(oot["source"] == "frozen_rolled_forward") & (oot["metric"] == "auc")
+             & (oot["quarter"] != "")].sort_values("quarter", kind="stable")
+    keys["oot_frozen_per_quarter"] = [
+        {"quarter": r["quarter"], "auc": _none_if_na(r["value"])}
+        for _, r in pq.iterrows()]
+    return keys
+
+
+def build_payload(cfg: dict, narratives: dict, table_suffix: str = "_all",
+                  predictions_table: str = "unified_predictions",
+                  eval_table: str = "unified_model_eval",
+                  stability_table: str = "unified_label_stability") -> dict:
+    funds = load_table(f"funds{table_suffix}", cfg)
+    metrics_overall = load_table(
+        f"fund_metrics_overall{table_suffix}", cfg).set_index("series_id")
+    clusters_tbl = load_table(f"fund_clusters{table_suffix}", cfg)
+    definitions = load_table(f"cluster_definitions{table_suffix}", cfg)
+    holdings = load_table(f"holdings{table_suffix}", cfg)
+    model_eval = load_table(eval_table, cfg)
+    coords = load_table(f"cluster_map_coords{table_suffix}", cfg)
+    predictions = load_table(predictions_table, cfg)
+    stability = (load_table(stability_table, cfg)
+                 if table_exists(stability_table, cfg) else pd.DataFrame(
                      columns=["flip_rate"]))
 
     equity = funds[funds["is_us_equity"]]
@@ -146,6 +186,7 @@ def build_payload(cfg: dict, narratives: dict) -> dict:
             "per_quarter": per_quarter,
             "mean_flip_rate": _none_if_na(stability["flip_rate"].mean())
                               if len(stability) else None,
+            **_read_oot_validation(cfg),
         },
         "coords": [{"sid": r["series_id"], "x": round(float(r["x"]), 4),
                     "y": round(float(r["y"]), 4), "cluster": int(r["cluster_id"])}
