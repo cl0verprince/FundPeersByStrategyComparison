@@ -177,7 +177,12 @@ def _stage_evaluate(cfg: dict) -> dict:
 
 
 def _stage_dashboard(cfg: dict) -> None:
-    dashboard_build.run(cfg, narrative_mode="cached")
+    # The refresh operates on the _full universe end-to-end; the dashboard must too
+    # (the defaults would silently rebuild the stale small-universe _all dashboard).
+    dashboard_build.run(cfg, narrative_mode="cached", table_suffix="_full",
+                        predictions_table="full_predictions",
+                        eval_table="full_model_eval",
+                        stability_table="full_label_stability")
 
 
 def _stage_docs_and_commit(cfg: dict, new_quarter: str, summary: dict, push: bool) -> None:

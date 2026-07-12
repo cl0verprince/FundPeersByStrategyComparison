@@ -48,7 +48,7 @@ Read the arc top to bottom: a 0.717 backtest degrades to **0.574 on genuinely co
 - **Per-quarter spread is wide.** The retrained model's AUC swings 0.453–0.748 across the five 2025 test quarters; a single pooled number overstates the precision.
 - **The regime flips.** On the 2025q4 → 2026q1 transition the model scores **0.453 — below chance** — mean reversion itself inverted (raw persistence 0.551 beat the model there). Fees do not fix this.
 - **Label-noise floor ~8.3%.** Perturbing each fund's peer set, the underperform label flips on >10% of draws for 22.1% of fund-quarters (n≈40,808) — an intrinsic ceiling on any achievable AUC.
-- **Fund-disjoint checks: 0.603 (no fees), 0.614 (with fees).** Trained and tested on completely separate sets of funds — within a hair of the pooled numbers, so the edge is not fund-identity memorization.
+- **Fund-disjoint checks hold.** Trained and tested on completely separate sets of funds: 0.603 (no-fees, full panel); on the fee-covered subset, 0.611 no-fees vs 0.614 with-fees (a controlled +0.003) — all within a hair of the pooled numbers, so the edge is not fund-identity memorization.
 
 ## Example narration
 
@@ -58,7 +58,7 @@ phi-4 (running locally via LM Studio) writes these; it is handed only the comput
 
 > The "Mixed Diversified Emerging Markets" cluster comprises 12 mutual funds, with a significant focus on diversified emerging markets... an average annualized volatility of 18.4%... The average Sharpe ratio stands at 0.11... an average maximum drawdown of -25.4%... A notable characteristic within this cluster is the unanimous investment in Dimensional Fund Advisors, which holds a dominant position with an average weight of 100% across all member funds.
 
-*(Counts reflect the 2,243-fund dashboard universe. The LLM only verbalizes numbers the pipeline already produced — it never labels, decides, or predicts.)*
+*(These examples come from the earlier 2,243-fund dashboard build; the shipped dashboard covers 3,231 funds with freshly generated narrations. The LLM only verbalizes numbers the pipeline already produced — it never labels, decides, or predicts.)*
 
 ## Limitations
 
@@ -83,9 +83,17 @@ pip install -r requirements.txt
 # 2. Run the core pipeline end-to-end (ingest → similarity → metrics → predict → narrate)
 python conductor.py
 
-# 3. Build the dashboard (drop --skip-narratives to regenerate phi-4 narrations)
+# 3. Build the dashboard for the core-pipeline universe (drop --skip-narratives for phi-4 narrations)
 python -m steps.step8_dashboard.build --skip-narratives
 ```
+
+**Note on the committed dashboard:** `reports/cluster_dashboard.html` as shipped is the
+*full-universe* build (3,231 funds, 40 clusters), which additionally requires the exploratory
+steps beyond the core pipeline — the full-universe ingestion and rebuild
+(`python -m steps.step10_full_universe.build`, hours of downloads/lookups on first run) and the
+fees step (`python -m steps.step9_fees_turnover.build`) — then
+`python -m steps.step8_dashboard.build --table-suffix _full --prefix full`. The three commands
+above reproduce the core deliverable; the shipped dashboard reflects the larger follow-up study.
 
 Then explore:
 - **`reports/cluster_dashboard.html`** — the interactive fund/cluster dashboard (self-contained, offline).
@@ -98,7 +106,7 @@ Then explore:
 
 Distilled from `techniques.json`:
 
-- **Random forest, not deep learning.** A ~40k-row tabular panel with a noisy financial label is exactly where tree ensembles win — nonlinear interactions without scaling assumptions, native feature importances for a financial audience, and measurably less overfitting than a single tree (0.638 → 0.717 on the same split). A neural net buys nothing at this size and costs the explainability.
+- **Random forest, not deep learning.** A ~40k-row tabular panel with a noisy financial label is exactly where tree ensembles win — nonlinear interactions without scaling assumptions, native feature importances for a financial audience, and measurably less overfitting than a single tree (0.638 → 0.710 on the same 363-fund split; the later full-universe rebuild reached 0.717 before its out-of-time reckoning). A neural net buys nothing at this size and costs the explainability.
 - **A local LLM behind a hard RAG boundary.** phi-4 (quantized, via LM Studio) is fed every fact it may use — retrieved from the pipeline's own tables — and forbidden the rest. Classical ML produces every number and decision; the LLM only turns them into English. Verified claim-by-claim against the source tables, with zero invented numbers.
 - **Monte Carlo as an honesty layer, not a return simulator.** Simulating fund returns would mean *assuming* a return-generating process — replacing measured patterns with analyst assumptions. Instead MC quantifies uncertainty *in the evaluation*: a bootstrap CI on the headline AUC, a paired significance test of the edge over the naive rule, and the label-noise floor study.
 - **Clusters validated against an independent label.** Internal cohesion metrics (silhouette, inertia) can be optimized by any clustering. Scoring against third-party fund categories (via chance-corrected adjusted Rand index) is a check the clustering cannot game.
