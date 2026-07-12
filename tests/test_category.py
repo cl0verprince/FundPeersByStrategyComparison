@@ -38,3 +38,21 @@ def test_compute_dominant_category_info_builds_allocation_only_short_title():
     assert row["short_title"] == "Leaning Small Value"
     for forbidden in ("sharpe", "volatility"):
         assert forbidden not in row["short_title"].lower()
+
+
+def test_compute_dominant_category_info_handles_all_unresolved_cluster():
+    """Regression: a cluster whose members ALL lack a yahoo_category (NaN / not in the map)
+    must resolve to 'Unknown' - the step2 convention - not crash on an empty mode().
+    First hit on the real _full universe (2022q3, cluster 37)."""
+    cluster_assignments = pd.DataFrame([
+        {"series_id": "S1", "cluster_id": 0},
+        {"series_id": "S2", "cluster_id": 0},
+        {"series_id": "S3", "cluster_id": 1},
+    ])
+    category_by_series = pd.Series({"S1": None, "S3": "Small Growth"})  # S2 absent entirely
+    result = compute_dominant_category_info(cluster_assignments, category_by_series)
+    assert len(result) == 2
+    unresolved = result[result["cluster_id"] == 0].iloc[0]
+    assert unresolved["dominant_category"] == "Unknown"
+    assert unresolved["dominant_category_share"] == 1.0
+    assert unresolved["short_title"] == "Concentrated Unknown"

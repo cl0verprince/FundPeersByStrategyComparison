@@ -38,7 +38,10 @@ def compute_dominant_category_info(cluster_assignments: pd.DataFrame,
     cluster_definitions table, which adds performance stats as separate descriptive fields,
     not part of the name)."""
     df = cluster_assignments.copy()
-    df["yahoo_category"] = df["series_id"].map(category_by_series)
+    # fillna("Unknown") mirrors step2's purity-truth convention. Without it, a cluster whose
+    # members ALL lack a yahoo_category crashes the empty mode() below - first hit for real
+    # on the _full universe (2022q3, cluster 37: every member category-unresolved).
+    df["yahoo_category"] = df["series_id"].map(category_by_series).fillna("Unknown")
     rows = []
     for cluster_id, group in df.groupby("cluster_id"):
         dominant_category = group["yahoo_category"].mode().iloc[0]

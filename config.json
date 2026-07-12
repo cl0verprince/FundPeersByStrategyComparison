@@ -16,7 +16,8 @@
     "yahoo_max_retries": 3
   },
   "full": {
-    "min_consecutive_quarters": 6
+    "min_consecutive_quarters": 6,
+    "n_clusters": 40
   },
   "paths": {
     "raw": "data/raw",
