@@ -1,14 +1,48 @@
 {
   "steps": [
-    {"name": "step0_setup", "status": "done"},
-    {"name": "step1_ingest", "status": "done"},
-    {"name": "step2_similarity", "status": "done"},
-    {"name": "step3_metrics", "status": "done"},
-    {"name": "step4_predict", "status": "done"},
-    {"name": "step5_narrate", "status": "done"},
-    {"name": "step6_out_of_sample", "status": "done"},
-    {"name": "step7_unified_universe", "status": "done"},
-    {"name": "step8_dashboard", "status": "done"},
-    {"name": "step10_full_universe", "status": "done"}
+    {
+      "name": "step0_setup",
+      "status": "done"
+    },
+    {
+      "name": "step1_ingest",
+      "status": "done"
+    },
+    {
+      "name": "step2_similarity",
+      "status": "done"
+    },
+    {
+      "name": "step3_metrics",
+      "status": "done"
+    },
+    {
+      "name": "step4_predict",
+      "status": "done"
+    },
+    {
+      "name": "step5_narrate",
+      "status": "done"
+    },
+    {
+      "name": "step6_out_of_sample",
+      "status": "done"
+    },
+    {
+      "name": "step7_unified_universe",
+      "status": "done"
+    },
+    {
+      "name": "step8_dashboard",
+      "status": "done"
+    },
+    {
+      "name": "step10_full_universe",
+      "status": "done"
+    },
+    {
+      "name": "step9_fees_turnover",
+      "status": "done"
+    }
   ]
 }

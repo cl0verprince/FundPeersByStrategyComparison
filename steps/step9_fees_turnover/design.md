@@ -192,6 +192,104 @@ Within a `(adsh, series, class)` group the fee tag can repeat (480/4965 net rows
 - Task 2 rule: **keep the row with the max `ddate`** per (adsh, series, class); if still
   tied, break deterministically (e.g. max `value`) so the pipeline is reproducible.
 
+## Universe re-base note (2026-07-12)
+This step was planned against step7's `_all` universe (2,087 strategy funds / 20,838
+labeled rows / 12 quarters) but executed AFTER the step10 expansion, so it runs on the
+**`_full` universe**: 3,035 US-equity strategy funds, 41,013 labeled rows + 2,856 forward,
+17 quarters (2022q1–2026q1), `holdout_transitions=5` (test = the 2024q4..2025q4
+transitions — step10's boundary). The bars to beat are therefore step10's re-based
+numbers: **reversed persistence 0.604** and the **no-fees full-panel model 0.614
+[0.605, 0.623]** — not the plan's 0.715/0.717-era figures.
+
+## Task-2/3 concretizations (per the schema amendment)
+- **Sanity bounds chosen**: expense ratios (net AND gross) kept iff in **[0, 0.10]**;
+  turnover kept iff in **[0, 20]**. Rationale: verified net max is 0.0598 — a real, legit
+  US-equity fund fee — so the plan's example (0, 0.05] would drop genuine funds; 0.10 is
+  the amendment's own generous bound and still kills the gross garbage (max 6.30 = 630%).
+  Turnover 20 (=2000%) keeps aggressive-but-real traders and kills the mis-scaled entries
+  (max 44,577). Out-of-bound VALUES are nulled, not whole rows dropped. Excluded values
+  across all 21 quarters (strategy universe; tallied from the build log): **14 net,
+  204 gross, 22 turnover**.
+- **fee_source column** records net-vs-gross provenance per row (the mandatory
+  net-else-gross fallback): in 2024q4, 1,014 of 3,069 rows are gross-sourced.
+- **Class→series = MEAN across classes.** The panel's label is built from step1's
+  mean-across-classes series return (`_aggregate_class_returns_to_series`), so the fee
+  must describe the same entity. This mirrors step1's RETURN aggregation, deliberately NOT
+  its lowest-`classId` rule (that rule exists only for ticker lookup). The plan's
+  "class with most non-null fee history" fallback never fires — it applies only if a
+  net-assets-weighted policy were needed; the mean needs no weights. Flagged as the
+  documented Task-3 choice the amendment left open.
+- **rr_fees_raw scope**: built for the 3,035-fund strategy universe only (the num.tsv
+  files are large; filtering to our 3 tags + our series ids happens per-chunk at read
+  time). Documented deliberate scope choice.
+- **Dedup**: within (adsh, series, class, tag) keep max `ddate`, tie-break max `value`
+  (deterministic; verified byte-identical frames across repeated parses).
+
+## UAT results (2026-07-12)
+Run: `python -m steps.step9_fees_turnover.build` (log `.superpowers/sdd/step9-final.log`).
+All 21 RR ZIPs cached; parse → `rr_fees_raw` **58,226 rows, 3,031 distinct series, median
+net expense 0.0092** (equity ballpark — scaling verified); `rr_fees` **51,595 rows**
+(3,035 series × 17 quarters); **0 future-dated source filings** (assert passed).
+
+### Coverage (gate 0.80)
+- Funds: expense **3,031/3,035 (99.9%)**, turnover **3,030/3,035 (99.8%)**.
+- Labeled rows (of 41,013): expense **40,669 (99.2%)**, turnover **39,748 (96.9%)**,
+  both **39,477 (96.3%)**.
+- **Branch: ≥ 0.80 → single-model common-covered-subset comparison.** Both arms below run
+  on the 39,477-row covered subset (13,753 chronological test rows), so the only
+  difference between them is the two fee columns.
+
+### Headline comparison (chronological split, fund-clustered bootstrap, 2,000 iters)
+| Scorer | pooled AUC | 95% CI |
+|---|---|---|
+| Random | 0.500 | — |
+| Persistence (step7 orientation) | 0.396 | — |
+| **Reversed persistence (mean-reversion rule)** | **0.604** | — |
+| **Expense-rank (reviewer's naive rule)** | **0.527** | — |
+| No-fees model (covered subset) | 0.615 | [0.605, 0.624] |
+| **With-fees model (covered subset)** | **0.619** | **[0.610, 0.629]** |
+
+Paired fund-clustered edge CIs (the honest tests):
+- with-fees vs reversed persistence: **[+0.010, +0.021]**, p(edge≤0)=0.000 → the model
+  clears the mean-reversion rule beyond noise.
+- with-fees vs no-fees: **[+0.003, +0.006]**, p=0.000 → fees/turnover add a statistically
+  real but economically TINY ~+0.005 AUC.
+- with-fees vs expense-rank: **[+0.079, +0.105]**, p=0.000 → the model dominates the naive
+  fee rule.
+- no-fees (covered subset) 0.615 ≈ step10's full-panel 0.614 — the covered subset is not
+  a materially different population.
+
+### Per-quarter AUC (test window)
+| quarter | no-fees | with-fees |
+|---|---|---|
+| 2024q4 | 0.606 | 0.614 |
+| 2025q1 | 0.651 | 0.656 |
+| 2025q2 | 0.751 | 0.749 |
+| 2025q3 | 0.589 | 0.591 |
+| 2025q4 | 0.460 | 0.468 |
+
+Same regime picture as step10: strong mid-2025, below chance on the 2025q4→2026q1
+transition — fees do not rescue the regime dependence.
+
+### Fund-disjoint split (doubly-disjoint: unseen funds × unseen period)
+Seeded 80/20 fund split (seed 42, test_share 0.20; 2,712 test rows): no-fees **0.611**,
+with-fees **0.614**. Both within a whisker of their chronological counterparts → no
+fund-identity memorization; the small fee edge survives on never-seen funds.
+
+### Feature importances (with-fees model, 17 features)
+`expense_ratio_net` ranks **7th** (importance 0.043), `portfolio_turnover` **13th**
+(0.020); `return_vs_peer_median_q` still dominates (0.378). Fees are real but mid-table
+signals, far behind mean reversion.
+
+### Honest bottom line
+Fees/turnover move the model from 0.615 to 0.619 — the edge over reversed persistence
+(0.604) widens from ~0.011 to ~0.015 and its CI [+0.010, +0.021] now clearly excludes
+zero. The reviewer's expense-rank rule (0.527) is well above chance — fees DO predict
+underperformance — but the model already captures most of that. Verdict: **fees are a
+genuine, statistically solid, small improvement — not a regime-proof breakthrough** (the
+2025q4 below-chance quarter persists). Model bundle deliberately NOT saved pending the
+human gate decision.
+
 ## Out of scope
 - Scraping individual 485BPOS/N-1A filings (not needed — structured data exists).
 - Historical categories or survivorship-bias repair (documented limitations, separate
