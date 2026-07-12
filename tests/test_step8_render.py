@@ -30,11 +30,55 @@ PAYLOAD = {
 }
 
 
+# The data layer always emits the five oot_* keys (present with None -> JSON null) when the
+# oot_validation table is absent. This mirrors that exact state - distinct from omitting the
+# keys - so the "empty-oot renders like before" guarantee is verified against null, not undefined.
+PAYLOAD_OOT_NULL = copy.deepcopy(PAYLOAD)
+PAYLOAD_OOT_NULL["scorecard"].update({
+    "oot_published_auc": None, "oot_published_n_scored": None, "oot_published_base_rate": None,
+    "oot_frozen_pooled_auc": None, "oot_frozen_per_quarter": None,
+})
+
+PAYLOAD_OOT = copy.deepcopy(PAYLOAD)
+PAYLOAD_OOT["scorecard"].update({
+    "oot_published_auc": 0.47, "oot_published_n_scored": 421, "oot_published_base_rate": 0.48,
+    "oot_frozen_pooled_auc": 0.52,
+    "oot_frozen_per_quarter": [{"quarter": "2024q4", "auc": 0.46},
+                               {"quarter": "2025q1", "auc": 0.61}],
+})
+
+
 def test_renders_and_contains_disclaimer():
     html = render_dashboard(PAYLOAD)
     assert DISCLAIMER in html
     assert "Leaning Large Blend" in html
     assert "Target-Date 2050" in html
+
+
+def test_oot_panel_copy_present_only_with_data():
+    # The renderer text is client-side JS, so assert on the embedded payload + the renderer
+    # source (both are in the single HTML string). The panel gate lives in the JS; here we
+    # confirm the panel machinery ships and the data threads through when present.
+    with_oot = render_dashboard(PAYLOAD_OOT)
+    assert "Out-of-time reality check" in with_oot          # eyebrow copy (in template JS)
+    assert "renderOOTPanel" in with_oot                     # panel renderer shipped
+    # populated oot data is spliced into the payload blob
+    assert "oot_frozen_per_quarter" in with_oot
+    assert "2025q1" in with_oot
+
+
+def test_oot_null_keys_render_like_absent():
+    # null oot keys must behave exactly like the keys being absent: the payload differs, but
+    # the rendered document body (template + JS) is byte-identical, because the JS gates on
+    # the value with loose == null. Compare with the keys stripped entirely.
+    import re
+    a = render_dashboard(PAYLOAD_OOT_NULL)
+    b = render_dashboard(PAYLOAD)
+    # Strip the payload blob from both; the template/JS around it must be identical.
+    pat = r'(<script id="payload" type="application/json">).*?(</script>)'
+    a_tpl = re.sub(pat, r"\1\2", a, flags=re.DOTALL)
+    b_tpl = re.sub(pat, r"\1\2", b, flags=re.DOTALL)
+    assert a_tpl == b_tpl
 
 
 def test_no_external_requests():

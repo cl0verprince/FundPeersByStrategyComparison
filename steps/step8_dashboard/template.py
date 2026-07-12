@@ -6,19 +6,31 @@ built client-side by the embedded vanilla JS from that single JSON blob - the Py
 side builds nothing per-cluster, which keeps the output byte-for-byte deterministic
 and the file free of any network dependency.
 
-Design notes (dataviz skill):
+Design notes (dataviz + artifact-design skills):
 - Colour roles are CSS custom properties in :root, re-stated for prefers-color-scheme
-  dark; the chart body is written against roles, never raw hex (palette.md).
+  dark; the chart body is written against roles, never raw hex (palette.md). Neutrals
+  are a deliberate warm-paper ground under a cool analytical blue accent (a finance-
+  report pairing, not the cream+terracotta AI default); status red/green come straight
+  from palette.md's fixed status slots.
+- Typography is a real modular scale on the mandated system sans (dataviz forbids a
+  display/serif face, and the offline no-external-requests guarantee forbids a webfont):
+  an uppercase micro-label channel, balanced headings, proportional hero figures, and
+  tabular-nums reserved for aligned columns.
 - Categorical cluster colour: the reference palette tops out at 8 hues and forbids
-  cycling, but this universe has ~30 peer groups. Per the task's explicit mandate we
-  generate a fixed HSL wheel keyed on cluster_id (golden-angle spacing, lightness/
-  chroma inside the skill's per-mode bands). Colour is never the sole identity channel:
-  the scatter has a name/ticker hover tooltip and the Clusters index table is the
-  legend (a swatch per row beside the short title). See the report for this deviation.
-- Marks: 2px surface ring on scatter dots; top-holdings bars are one-hue (slot-1 blue)
-  with 4px rounded data-ends; recessive hairline chrome; text wears ink tokens only.
-- Interaction: dense scatter uses a single nearest-point hover layer (not 2,086 hit
-  targets); tables are generic click-to-sort, numeric-aware, nulls last both ways.
+  cycling, but this universe has ~40 peer groups. Per the task's explicit mandate we
+  generate a fixed HSL wheel keyed on cluster_id (golden-angle spacing, saturation/
+  lightness tuned inside the skill's per-mode bands and kept legible on both grounds).
+  Colour is never the sole identity channel: the scatter has a name/ticker hover
+  tooltip and the Clusters index table is the legend (a swatch per row beside the short
+  title). See the report for this documented deviation.
+- Marks: surface-ring on scatter dots over a recessive gridded frame with dimensionless
+  captions (the embedding carries no units, so no numeric ticks); top-holdings bars are
+  one-hue (slot-1 blue) with rounded data-ends; the out-of-time per-quarter strip
+  diverges from a 0.50 coin-flip baseline, below-0.50 bars in the critical status colour
+  with an explicit label (never colour alone); text wears ink tokens only.
+- Interaction: dense scatter uses a single nearest-point hover layer (not thousands of
+  hit targets); tables are generic click-to-sort, numeric-aware, nulls last both ways.
+  Transitions are CSS-only and disabled under prefers-reduced-motion.
 """
 
 TEMPLATE = r"""<!doctype html>
@@ -30,165 +42,262 @@ TEMPLATE = r"""<!doctype html>
 <style>
   :root {
     color-scheme: light dark;
+    /* warm-paper ground under a cool analytical accent (palette.md surfaces/inks) */
     --surface-1: #fcfcfb;
-    --page: #f9f9f7;
+    --page: #f5f5f2;
     --card: #ffffff;
     --ink-1: #0b0b0b;
     --ink-2: #52514e;
     --ink-muted: #898781;
-    --grid: #e1e0d9;
+    --grid: #e6e5de;
     --axis: #c3c2b7;
     --border: rgba(11,11,11,0.10);
+    --border-strong: rgba(11,11,11,0.16);
     --series-1: #2a78d6;
-    --series-1-wash: #cde2fb;
+    --series-1-wash: #d7e6fb;
+    --accent-tint: #f0f5fd;
     --good: #006300;
-    --nav-h: 56px;
+    --critical: #c23a35;
+    --shadow-1: 0 1px 2px rgba(11,11,11,.05), 0 1px 1px rgba(11,11,11,.03);
+    --shadow-2: 0 6px 22px rgba(11,11,11,.10);
+    --shadow-pop: 0 8px 28px rgba(11,11,11,.16);
+    /* type scale (~1.2 modular) */
+    --fs-eyebrow: .72rem;
+    --fs-body: 15px;
+    --fs-h3: 1.06rem;
+    --fs-h2: 1.34rem;
+    --fs-h1: 1.72rem;
+    --fs-hero: 3rem;
+    --radius: 14px;
+    --radius-sm: 9px;
+    --nav-h: 58px;
     --foot-h: 68px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --surface-1: #1a1a19;
       --page: #0d0d0d;
-      --card: #1a1a19;
+      --card: #1c1c1b;
       --ink-1: #ffffff;
       --ink-2: #c3c2b7;
-      --ink-muted: #898781;
+      --ink-muted: #8f8d87;
       --grid: #2c2c2a;
-      --axis: #383835;
-      --border: rgba(255,255,255,0.10);
+      --axis: #3d3d3a;
+      --border: rgba(255,255,255,0.11);
+      --border-strong: rgba(255,255,255,0.18);
       --series-1: #3987e5;
-      --series-1-wash: #184f95;
+      --series-1-wash: #1c4a86;
+      --accent-tint: #14243a;
       --good: #0ca30c;
+      --critical: #e06b6b;
+      --shadow-1: 0 1px 2px rgba(0,0,0,.4);
+      --shadow-2: 0 8px 26px rgba(0,0,0,.5);
+      --shadow-pop: 0 10px 30px rgba(0,0,0,.6);
     }
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
     margin: 0;
-    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: var(--fs-body)/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     background: var(--page);
     color: var(--ink-1);
-    padding-bottom: calc(var(--foot-h) + 1rem);
+    padding-bottom: calc(var(--foot-h) + 1.25rem);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
   a { color: var(--series-1); }
+  .eyebrow {
+    font-size: var(--fs-eyebrow); font-weight: 600; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--ink-muted); margin: 0 0 .35rem;
+  }
 
   /* ---- top nav + search ---- */
   nav {
     position: sticky; top: 0; z-index: 20;
-    display: flex; align-items: center; gap: .35rem; flex-wrap: wrap;
-    height: var(--nav-h); padding: 0 1rem;
-    background: var(--surface-1);
+    display: flex; align-items: center; gap: .3rem; flex-wrap: wrap;
+    height: var(--nav-h); padding: 0 1.15rem;
+    background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+    backdrop-filter: saturate(1.4) blur(8px);
     border-bottom: 1px solid var(--border);
   }
-  nav .brand { font-weight: 600; margin-right: .75rem; white-space: nowrap; }
-  nav a.navlink {
-    text-decoration: none; color: var(--ink-2);
-    padding: .3rem .6rem; border-radius: 7px; white-space: nowrap;
+  nav .brand {
+    font-weight: 700; margin-right: 1rem; white-space: nowrap;
+    letter-spacing: -.01em; display: inline-flex; align-items: center; gap: .5rem;
   }
-  nav a.navlink:hover { background: var(--page); }
-  nav a.navlink.active { color: var(--ink-1); background: var(--page); font-weight: 600; }
+  nav .brand::before {
+    content: ""; width: .7rem; height: .7rem; border-radius: 3px;
+    background: var(--series-1); box-shadow: 0 0 0 3px var(--accent-tint);
+  }
+  nav a.navlink {
+    text-decoration: none; color: var(--ink-2); font-size: .92rem;
+    padding: .35rem .65rem; border-radius: 8px; white-space: nowrap;
+    transition: background .14s ease, color .14s ease;
+  }
+  nav a.navlink:hover { background: var(--page); color: var(--ink-1); }
+  nav a.navlink.active { color: var(--ink-1); background: var(--accent-tint); font-weight: 600; }
   .search-wrap { position: relative; margin-left: auto; }
   #search {
-    font: inherit; padding: .35rem .6rem; width: 15rem; max-width: 45vw;
-    border: 1px solid var(--border); border-radius: 7px;
+    font: inherit; font-size: .92rem; padding: .4rem .65rem; width: 15rem; max-width: 45vw;
+    border: 1px solid var(--border-strong); border-radius: 9px;
     background: var(--card); color: var(--ink-1);
+    transition: border-color .14s ease, box-shadow .14s ease;
+  }
+  #search:focus {
+    outline: none; border-color: var(--series-1);
+    box-shadow: 0 0 0 3px var(--accent-tint);
   }
   #results {
-    position: absolute; right: 0; top: 2.4rem; z-index: 30;
+    position: absolute; right: 0; top: 2.6rem; z-index: 30;
     width: 22rem; max-width: 80vw; max-height: 60vh; overflow-y: auto;
-    background: var(--card); border: 1px solid var(--border); border-radius: 9px;
-    box-shadow: 0 8px 28px rgba(0,0,0,.18); padding: .3rem;
+    background: var(--card); border: 1px solid var(--border-strong); border-radius: 11px;
+    box-shadow: var(--shadow-pop); padding: .35rem;
   }
   #results button {
     display: block; width: 100%; text-align: left; font: inherit; cursor: pointer;
     background: none; border: 0; color: var(--ink-1);
-    padding: .4rem .5rem; border-radius: 6px;
+    padding: .45rem .55rem; border-radius: 7px; transition: background .12s ease;
   }
-  #results button:hover, #results button:focus { background: var(--page); }
+  #results button:hover, #results button:focus { background: var(--accent-tint); outline: none; }
   #results .r-sub { color: var(--ink-2); font-size: .82rem; }
-  #results .r-empty { padding: .5rem; color: var(--ink-2); }
+  #results .r-empty { padding: .55rem; color: var(--ink-2); }
 
-  /* ---- layout ---- */
-  main { max-width: 1000px; margin: 0 auto; padding: 1.5rem 1rem 2rem; }
-  h1 { font-size: 1.5rem; margin: 0 0 .4rem; }
-  h2 { font-size: 1.2rem; margin: 2rem 0 .8rem; }
-  h3 { font-size: 1.02rem; margin: 1.4rem 0 .5rem; }
-  p.lead { color: var(--ink-2); max-width: 62ch; }
+  /* ---- layout & type ---- */
+  main { max-width: 1040px; margin: 0 auto; padding: 2rem 1.15rem 2.5rem; }
+  h1 { font-size: var(--fs-h1); font-weight: 700; letter-spacing: -.02em;
+    line-height: 1.15; text-wrap: balance; margin: 0 0 .5rem;
+    display: flex; align-items: center; gap: .55rem; }
+  h2 { font-size: var(--fs-h2); font-weight: 650; letter-spacing: -.01em;
+    text-wrap: balance; margin: 2.4rem 0 .85rem; }
+  h3 { font-size: var(--fs-h3); font-weight: 650; margin: 1.6rem 0 .55rem; }
+  p { margin: .55rem 0; }
+  p.lead { color: var(--ink-2); max-width: 65ch; }
   .muted { color: var(--ink-2); }
 
   .card {
     background: var(--card); border: 1px solid var(--border);
-    border-radius: 12px; padding: 1.1rem 1.25rem; margin: 1rem 0;
+    border-radius: var(--radius); padding: 1.35rem 1.5rem; margin: 1.25rem 0;
+    box-shadow: var(--shadow-1);
   }
 
   /* ---- stat tiles ---- */
-  .tiles { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
+  .tiles { display: flex; flex-wrap: wrap; gap: .8rem; margin: 1.15rem 0; }
   .tile {
-    flex: 1 1 8rem; min-width: 8rem;
+    flex: 1 1 8.5rem; min-width: 8.5rem;
     background: var(--card); border: 1px solid var(--border);
-    border-radius: 11px; padding: .8rem .9rem;
+    border-radius: var(--radius-sm); padding: .9rem 1rem;
+    box-shadow: var(--shadow-1);
+    transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
   }
-  .tile .label { color: var(--ink-2); font-size: .8rem; }
-  .tile .value { font-size: 1.5rem; font-weight: 600; margin-top: .15rem; }
-  .hero { font-size: 2.6rem; font-weight: 600; line-height: 1.1; }
+  .tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-2);
+    border-color: var(--border-strong); }
+  .tile .label {
+    color: var(--ink-muted); font-size: var(--fs-eyebrow); font-weight: 600;
+    letter-spacing: .05em; text-transform: uppercase;
+  }
+  .tile .value { font-size: 1.55rem; font-weight: 650; margin-top: .3rem;
+    line-height: 1.1; letter-spacing: -.01em; }
+  .tile.accent { border-color: color-mix(in srgb, var(--series-1) 35%, var(--border)); }
+  .tile.accent .value { color: var(--series-1); }
+  .hero { font-size: var(--fs-hero); font-weight: 700; line-height: 1.05;
+    letter-spacing: -.03em; margin: .2rem 0 .1rem; }
 
   /* ---- tables ---- */
-  .tbl-scroll { overflow-x: auto; }
+  .tbl-scroll { overflow-x: auto; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); box-shadow: var(--shadow-1); }
   table { border-collapse: collapse; width: 100%; font-size: .9rem; }
-  th, td { padding: .45rem .6rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th, td { padding: .55rem .75rem; text-align: left;
+    border-bottom: 1px solid var(--border); }
+  tbody tr:last-child td { border-bottom: 0; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  thead th { color: var(--ink-2); font-weight: 600; white-space: nowrap; }
-  table.sortable thead th.sortable-th { cursor: pointer; user-select: none; }
+  thead th {
+    color: var(--ink-muted); font-weight: 600; white-space: nowrap;
+    font-size: var(--fs-eyebrow); letter-spacing: .04em; text-transform: uppercase;
+    background: var(--surface-1); position: sticky; top: var(--nav-h); z-index: 1;
+  }
+  table.sortable thead th.sortable-th { cursor: pointer; user-select: none;
+    transition: color .12s ease; }
   table.sortable thead th.sortable-th:hover { color: var(--ink-1); }
-  th[aria-sort="ascending"]::after { content: " \2191"; color: var(--ink-muted); }
-  th[aria-sort="descending"]::after { content: " \2193"; color: var(--ink-muted); }
-  tbody tr:hover { background: var(--page); }
+  th[aria-sort="ascending"]::after { content: " \2191"; color: var(--series-1); }
+  th[aria-sort="descending"]::after { content: " \2193"; color: var(--series-1); }
+  tbody tr { transition: background .12s ease; }
+  tbody tr:hover { background: var(--accent-tint); }
   tbody tr.hit { background: var(--series-1-wash); }
   .swatch {
     display: inline-block; width: .8rem; height: .8rem; border-radius: 3px;
-    margin-right: .45rem; vertical-align: -1px;
-    box-shadow: 0 0 0 2px var(--surface-1);
+    margin-right: .5rem; vertical-align: -1px;
+    box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 3px var(--border);
   }
-  a.rowlink { text-decoration: none; color: inherit; }
-  a.rowlink:hover { text-decoration: underline; }
+  a.rowlink { text-decoration: none; color: inherit; font-weight: 550; }
+  a.rowlink:hover { text-decoration: underline; text-decoration-color: var(--series-1); }
   sup.foot a { text-decoration: none; color: var(--series-1); font-weight: 600; }
 
   /* ---- scatter ---- */
-  .scatter-wrap { position: relative; }
+  .scatter-wrap { position: relative; margin: 1rem 0; }
   svg.scatter { width: 100%; height: auto; display: block;
-    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; }
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow-1); }
+  svg.scatter .grid-line { stroke: var(--grid); stroke-width: 1; }
+  svg.scatter .frame { fill: none; stroke: var(--axis); stroke-width: 1; }
+  svg.scatter .axis-cap { fill: var(--ink-muted); font-size: 13px;
+    font-family: system-ui, sans-serif; letter-spacing: .04em; }
   .tooltip {
     position: absolute; pointer-events: none; z-index: 5;
     background: var(--card); color: var(--ink-1);
-    border: 1px solid var(--border); border-radius: 8px;
-    padding: .4rem .55rem; font-size: .82rem; max-width: 16rem;
-    box-shadow: 0 6px 20px rgba(0,0,0,.2); opacity: 0; transition: opacity .08s;
+    border: 1px solid var(--border-strong); border-radius: 9px;
+    padding: .45rem .6rem; font-size: .82rem; max-width: 16rem;
+    box-shadow: var(--shadow-pop); opacity: 0; transition: opacity .09s ease;
   }
-  .tooltip .t-val { font-weight: 600; }
-  .tooltip .t-sub { color: var(--ink-2); }
+  .tooltip .t-val { font-weight: 650; }
+  .tooltip .t-sub { color: var(--ink-2); margin-top: .1rem; }
 
   /* ---- top-holdings bars ---- */
-  .bars { margin: .4rem 0; }
-  .bar-row { display: grid; grid-template-columns: 12rem 1fr auto; gap: .6rem;
-    align-items: center; margin: .3rem 0; }
+  .bars { margin: .6rem 0; display: flex; flex-direction: column; gap: .45rem; }
+  .bar-row { display: grid; grid-template-columns: 12rem 1fr auto; gap: .7rem;
+    align-items: center; }
   .bar-row .issuer { color: var(--ink-1); overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; }
-  .bar-track { background: var(--page); border-radius: 5px; height: 14px; overflow: hidden; }
+    white-space: nowrap; font-size: .9rem; }
+  .bar-track { background: var(--page); border-radius: 6px; height: 16px; overflow: hidden;
+    box-shadow: inset 0 0 0 1px var(--border); }
   .bar-fill { height: 100%; background: var(--series-1);
-    border-radius: 0 4px 4px 0; }
-  .bar-row .wt { color: var(--ink-2); font-variant-numeric: tabular-nums; font-size: .85rem; }
+    border-radius: 0 5px 5px 0; transition: width .3s ease; }
+  .bar-row .wt { color: var(--ink-2); font-variant-numeric: tabular-nums;
+    font-size: .85rem; font-weight: 550; }
   @media (max-width: 620px) { .bar-row { grid-template-columns: 8rem 1fr auto; } }
 
   .narrative { max-width: 68ch; }
   .identity-meta { color: var(--ink-2); margin: .2rem 0 0; }
 
+  /* ---- out-of-time reality panel ---- */
+  .oot {
+    background: linear-gradient(180deg, var(--accent-tint), var(--card) 62%);
+    border: 1px solid color-mix(in srgb, var(--series-1) 28%, var(--border));
+    box-shadow: var(--shadow-2);
+  }
+  .oot .eyebrow { color: var(--series-1); }
+  .qstrip { width: 100%; height: auto; display: block; margin: .35rem 0 .2rem; }
+  .qstrip .base-line { stroke: var(--axis); stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .qstrip .base-cap, .qstrip .q-lab { fill: var(--ink-muted); font-size: 12px;
+    font-family: system-ui, sans-serif; }
+  .qstrip .v-lab { fill: var(--ink-2); font-size: 12px; font-weight: 600;
+    font-family: system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+  .oot-note { color: var(--ink-2); font-size: .88rem; margin: .5rem 0 0;
+    display: flex; align-items: flex-start; gap: .45rem; }
+  .oot-note .flag { color: var(--critical); font-weight: 700; }
+
   /* ---- footer ---- */
   footer#disclaimer {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
-    background: var(--surface-1); border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+    backdrop-filter: blur(6px);
+    border-top: 1px solid var(--border);
     color: var(--ink-2); font-size: .78rem; line-height: 1.4;
-    padding: .55rem 1rem; text-align: center;
+    padding: .6rem 1.15rem; text-align: center;
     max-height: var(--foot-h); overflow-y: auto;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition: none !important; }
   }
 </style>
 </head>
@@ -225,8 +334,11 @@ function fmtScore(x) { return (x === null || x === undefined) ? "—" : Number(x
 const DARK = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
 function clusterColor(id) {
   const hue = (id * 137.508) % 360;                 // golden-angle spacing, fixed by id
-  const s = DARK ? 62 : 58;                          // chroma inside the skill's band
-  const l = DARK ? 60 : 46;                          // lightness inside the per-mode band
+  // Saturation/lightness tuned per mode: muted enough to read as one disciplined system
+  // across ~40 hues, light enough on dark ground and dark enough on light ground to stay
+  // legible. Identity never rests on colour alone (legend swatch + hover tooltip).
+  const s = DARK ? 58 : 55;
+  const l = DARK ? 62 : 45;
   return "hsl(" + hue.toFixed(1) + " " + s + "% " + l + "%)";
 }
 
@@ -405,10 +517,184 @@ function renderOverview() {
 function tile(label, value) {
   return el("div", { class: "tile" }, [txt("div", label, "label"), txt("div", value, "value")]);
 }
+function tileAccent(label, value) {
+  return el("div", { class: "tile accent" }, [txt("div", label, "label"), txt("div", value, "value")]);
+}
+
+/* ---------- out-of-time per-quarter strip (diverges from a 0.50 baseline) ---------- */
+function barPath(x, w, top, h, r, down) {
+  r = Math.max(0, Math.min(r, w / 2, h));
+  if (down) {                                            // square at baseline (top), round at cap (bottom)
+    return "M" + x + " " + top + " h" + w + " v" + (h - r)
+      + " a" + r + " " + r + " 0 0 1 " + (-r) + " " + r
+      + " h" + (-(w - 2 * r))
+      + " a" + r + " " + r + " 0 0 1 " + (-r) + " " + (-r) + " z";
+  }
+  return "M" + x + " " + (top + h) + " v" + (-(h - r))   // square at baseline (bottom), round at cap (top)
+    + " a" + r + " " + r + " 0 0 1 " + r + " " + (-r)
+    + " h" + (w - 2 * r)
+    + " a" + r + " " + r + " 0 0 1 " + r + " " + r
+    + " v" + (h - r) + " z";
+}
+
+function renderQuarterStrip(pq) {
+  const W = 720, H = 190, padT = 24, padB = 30, padL = 10, padR = 10;
+  const y0 = padT, y1 = H - padB;
+  let lo = 0.5, hi = 0.5;
+  for (const q of pq) {
+    const v = q.auc;
+    if (v === null || v === undefined) continue;
+    if (v < lo) lo = v; if (v > hi) hi = v;
+  }
+  const pad = Math.max(0.03, (hi - lo) * 0.18);
+  lo -= pad; hi += pad;
+  if (hi - lo < 0.12) { const mid = (hi + lo) / 2; lo = mid - 0.06; hi = mid + 0.06; }
+  const sy = v => y1 - (v - lo) / (hi - lo) * (y1 - y0);
+  const yBase = sy(0.5);
+  const n = pq.length;
+  const slot = (W - padL - padR) / n;
+  const bw = Math.min(24, slot * 0.5);
+
+  const svg = document.createElementNS(SVGNS, "svg");
+  svg.setAttribute("class", "qstrip");
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Frozen-model AUC by quarter, relative to a 0.50 coin-flip baseline");
+
+  function sEl(tag, attrs, text) {
+    const e = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  svg.appendChild(sEl("line", { class: "base-line",
+    x1: padL, y1: yBase.toFixed(1), x2: W - padR, y2: yBase.toFixed(1) }));
+  svg.appendChild(sEl("text", { class: "base-cap", x: padL, y: 14,
+    "text-anchor": "start" }, "0.50 — coin flip"));
+
+  for (let i = 0; i < n; i++) {
+    const q = pq[i];
+    const cx = padL + slot * (i + 0.5);
+    svg.appendChild(sEl("text", { class: "q-lab", x: cx.toFixed(1), y: (H - 10),
+      "text-anchor": "middle" }, q.quarter));
+    if (q.auc === null || q.auc === undefined) continue;
+    const yv = sy(q.auc);
+    const below = q.auc < 0.5;
+    const top = Math.min(yv, yBase), bot = Math.max(yv, yBase);
+    const h = Math.max(1.5, bot - top);
+    svg.appendChild(sEl("path", { d: barPath(cx - bw / 2, bw, top, h, 4, below),
+      fill: below ? "var(--critical)" : "var(--series-1)" }));
+    svg.appendChild(sEl("text", { class: "v-lab", x: cx.toFixed(1),
+      y: (below ? bot + 14 : top - 6).toFixed(1), "text-anchor": "middle" }, fmtScore(q.auc)));
+  }
+  return svg;
+}
+
+/* ---------- out-of-time reality panel (leads the scorecard; branches on the data) ---------- */
+function renderOOTPanel(s) {
+  const pub = s.oot_published_auc;
+  const hasPub = (pub !== null && pub !== undefined);
+  const pq = Array.isArray(s.oot_frozen_per_quarter) ? s.oot_frozen_per_quarter : [];
+  const hasStrip = pq.length > 0;
+  if (!hasPub && !hasStrip) return null;                 // absent -> panel simply not rendered
+
+  const card = el("div", { class: "card oot" });
+  card.appendChild(txt("p", "Out-of-time reality check", "eyebrow"));
+  card.appendChild(txt("h2", "How the model held up on data it had never seen"));
+  card.appendChild(txt("p",
+    "The scorecard below is a backtest — measured on history the model was fitted and "
+    + "tuned against. This is the harder test: predictions frozen before the outcomes "
+    + "existed, then graded once the returns actually arrived.", "lead"));
+
+  if (hasPub) {
+    const backtest = s.auc;
+    const frozenPooled = s.oot_frozen_pooled_auc;
+    const tiles = [
+      tileAccent("Published-forward AUC", fmtScore(pub)),
+      tile("Backtest AUC (for contrast)", fmtScore(backtest)),
+    ];
+    if (frozenPooled !== null && frozenPooled !== undefined) {
+      tiles.push(tile("Frozen model, rolled forward", fmtScore(frozenPooled)));
+    }
+    card.appendChild(el("div", { class: "tiles" }, tiles));
+
+    // graded-against detail (only the fields that are present)
+    let nInfo = "";
+    const ns = s.oot_published_n_scored, br = s.oot_published_base_rate;
+    if (ns !== null && ns !== undefined) {
+      nInfo = " It was graded against " + Number(ns).toLocaleString("en-US")
+        + " funds whose next-quarter returns have since been realized"
+        + ((br !== null && br !== undefined)
+            ? " (a " + fmtPct(br) + " base rate of lagging peers)." : ".");
+    }
+
+    // published vs the 0.50 coin-flip line
+    const p1 = el("p", { class: "lead" });
+    if (pub < 0.5) {
+      p1.textContent = "On genuinely unseen filings the model scored " + fmtScore(pub)
+        + " — below 0.50, i.e. worse than a coin flip at ranking which funds went on to "
+        + "lag their peers." + nInfo;
+    } else if (pub < 0.52) {
+      p1.textContent = "On genuinely unseen filings the model scored " + fmtScore(pub)
+        + " — essentially a coin flip (0.50) at ranking which funds went on to lag their "
+        + "peers." + nInfo;
+    } else {
+      p1.textContent = "On genuinely unseen filings the model scored " + fmtScore(pub)
+        + ", above the 0.50 coin-flip line." + nInfo;
+    }
+    card.appendChild(p1);
+
+    // published vs the backtest (different model/run - branch on the sign, never assume)
+    if (backtest !== null && backtest !== undefined) {
+      const diff = pub - backtest;
+      const p2 = el("p", { class: "lead" });
+      if (diff <= -0.03) {
+        p2.textContent = "That is " + fmtScore(-diff) + " below the backtest's "
+          + fmtScore(backtest) + ": the backtest was optimistic about what this approach "
+          + "delivers once the future is genuinely unknown.";
+      } else if (diff >= 0.03) {
+        p2.textContent = "That is " + fmtScore(diff) + " above the backtest's "
+          + fmtScore(backtest) + " — on this slice the frozen predictions held up at least "
+          + "as well as the backtest implied.";
+      } else {
+        p2.textContent = "That lands within " + fmtScore(Math.abs(diff)) + " of the "
+          + "backtest's " + fmtScore(backtest) + " — roughly in line, on this slice, with "
+          + "what the backtest implied.";
+      }
+      card.appendChild(p2);
+    }
+  }
+
+  if (hasStrip) {
+    card.appendChild(txt("h3", "Frozen model, quarter by quarter"));
+    card.appendChild(renderQuarterStrip(pq));
+    const below = pq.filter(q => q.auc !== null && q.auc !== undefined && q.auc < 0.5);
+    const cap = el("p", { class: "oot-note" });
+    if (below.length) {
+      cap.appendChild(txt("span", "▼", "flag"));
+      cap.appendChild(document.createTextNode(
+        "Each bar is one quarter's AUC for the frozen model rolled forward; the dashed line "
+        + "is 0.50 (a coin flip). " + below.length + " of " + pq.length + " quarters came in "
+        + "below it (" + below.map(q => q.quarter).join(", ") + ") — quarters the model did "
+        + "no better than chance. A single pooled number hides that."));
+    } else {
+      cap.appendChild(document.createTextNode(
+        "Each bar is one quarter's AUC for the frozen model rolled forward; the dashed line "
+        + "is 0.50 (a coin flip). Every quarter here cleared it, but the spread is wide — "
+        + "read any single quarter with caution."));
+    }
+    card.appendChild(cap);
+  }
+  return card;
+}
 
 /* ---------- scorecard (honest about persistence < 0.5) ---------- */
 function renderScorecard() {
   const s = DATA.scorecard;
+  const wrap = document.createDocumentFragment();
+  const oot = renderOOTPanel(s);
+  if (oot) wrap.appendChild(oot);
   const auc = s.auc, lo = s.auc_ci ? s.auc_ci[0] : null, hi = s.auc_ci ? s.auc_ci[1] : null;
   const persist = s.persistence_auc;
   const reversed = (persist === null || persist === undefined) ? null : 1 - persist;
@@ -417,6 +703,7 @@ function renderScorecard() {
     ? null : Math.max(persist, reversed);
 
   const card = el("div", { class: "card" });
+  card.appendChild(txt("p", "Backtest scorecard", "eyebrow"));
   card.appendChild(txt("h2", "Does the model actually have an edge?"));
 
   card.appendChild(el("div", { class: "tiles" }, [
@@ -495,12 +782,15 @@ function renderScorecard() {
     + "individual fund. Treat it as one weak, past-tense input among many — never as advice."));
   card.appendChild(wi);
 
-  return card;
+  wrap.appendChild(card);
+  return wrap;
 }
 
 /* ---------- scatter (SVG, nearest-point hover) ---------- */
 function renderScatter() {
-  const W = 920, H = 520, PAD = 18;
+  const W = 920, H = 540;
+  const padL = 46, padR = 20, padT = 20, padB = 44;   // room for dimensionless captions
+  const x0 = padL, x1 = W - padR, y0 = padT, y1 = H - padB;
   const pts = DATA.coords;
   const wrap = el("div", { class: "scatter-wrap" });
   const svg = document.createElementNS(SVGNS, "svg");
@@ -515,14 +805,37 @@ function renderScatter() {
     return wrap;
   }
 
+  function svgEl(tag, attrs) {
+    const n = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+
+  // recessive gridlines behind the marks (spatial reference only - the embedding is
+  // unitless, so no numeric ticks: they would imply a false precision).
+  const NV = 6, NH = 4;
+  for (let i = 1; i < NV; i++) {
+    const gx = x0 + (x1 - x0) * i / NV;
+    svg.appendChild(svgEl("line", { class: "grid-line",
+      x1: gx.toFixed(1), y1: y0, x2: gx.toFixed(1), y2: y1 }));
+  }
+  for (let i = 1; i < NH; i++) {
+    const gy = y0 + (y1 - y0) * i / NH;
+    svg.appendChild(svgEl("line", { class: "grid-line",
+      x1: x0, y1: gy.toFixed(1), x2: x1, y2: gy.toFixed(1) }));
+  }
+  svg.appendChild(svgEl("rect", { class: "frame",
+    x: x0, y: y0, width: (x1 - x0), height: (y1 - y0), rx: 6 }));
+
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const p of pts) {
     if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
     if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
   }
   const spanX = (maxX - minX) || 1, spanY = (maxY - minY) || 1;
-  const sx = x => PAD + (x - minX) / spanX * (W - 2 * PAD);
-  const sy = y => H - PAD - (y - minY) / spanY * (H - 2 * PAD);
+  const inset = 14;
+  const sx = x => x0 + inset + (x - minX) / spanX * (x1 - x0 - 2 * inset);
+  const sy = y => y1 - inset - (y - minY) / spanY * (y1 - y0 - 2 * inset);
 
   const placed = [];
   for (const p of pts) {
@@ -530,13 +843,23 @@ function renderScatter() {
     const dot = document.createElementNS(SVGNS, "circle");
     dot.setAttribute("cx", cx.toFixed(1));
     dot.setAttribute("cy", cy.toFixed(1));
-    dot.setAttribute("r", "3.4");
+    dot.setAttribute("r", "3.6");
     dot.setAttribute("fill", clusterColor(p.cluster));
-    dot.setAttribute("stroke", "var(--surface-1)");   // 2px surface ring for overlap
-    dot.setAttribute("stroke-width", "1");
+    dot.setAttribute("stroke", "var(--surface-1)");   // surface ring for overlap legibility
+    dot.setAttribute("stroke-width", "1.4");
     svg.appendChild(dot);
     placed.push({ cx, cy, p });
   }
+
+  // dimensionless axis captions (the embedding carries no units of its own)
+  const capX = svgEl("text", { class: "axis-cap", x: ((x0 + x1) / 2).toFixed(0),
+    y: (H - 12), "text-anchor": "middle" });
+  capX.textContent = "Similarity dimension 1 →";
+  svg.appendChild(capX);
+  const capY = svgEl("text", { class: "axis-cap", x: 16, y: ((y0 + y1) / 2).toFixed(0),
+    "text-anchor": "middle", transform: "rotate(-90 16 " + ((y0 + y1) / 2).toFixed(0) + ")" });
+  capY.textContent = "Similarity dimension 2 →";
+  svg.appendChild(capY);
   wrap.appendChild(svg);
 
   const tip = el("div", { class: "tooltip" });
