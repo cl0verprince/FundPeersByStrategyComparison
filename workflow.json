@@ -43,6 +43,10 @@
     {
       "name": "step9_fees_turnover",
       "status": "done"
+    },
+    {
+      "name": "step12_dashboard_full_rebuild",
+      "status": "done"
     }
   ]
 }
