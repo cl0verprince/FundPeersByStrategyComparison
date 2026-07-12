@@ -181,6 +181,74 @@ the relaxed rule admits launches; dead funds leave before 2026q1):
   `cluster_validation_full`, `cluster_map_coords_full`; plot
   `reports/cluster_map_2026q1_full.png`.
 
+## UAT results (2026-07-12)
+
+Run: `python -m steps.step10_full_universe.build` (detached; log
+`.superpowers/sdd/step10-final.log`, EXIT_CODE=0, ~11 min). Validation ran FIRST — the
+frozen-model numbers below were saved to `oot_validation` before the retrained model
+existed. Panel: 41,013 labeled rows + 2,856 forward rows (2026q1 → next), 15 features
+(3,652 of 47,982 clustered fund-quarters dropped for a missing feature; 482 non-final
+fund-quarters unlabeled).
+
+### 1. THE headline — published 2024q4 predictions vs reality: **AUC 0.574**
+The dashboard's 2,086 genuine, committed-before-the-fact forward predictions
+(2024q4 → 2025q1), scored against realized 2025q1 returns and realized peer medians:
+- **AUC = 0.574** on **2,057 scored** funds; **base rate 0.532**.
+- Attrition buckets partition the 2,086 exactly: **2,057 scored + 29 missing own 2025q1
+  return (died/merged/late) + 0 insufficient-peers**.
+- Honest reading: the committed predictions carried real but modest signal — clearly above
+  the 0.500 coin flip, far below the 0.717 backtest. Two compounding reasons, both
+  measurable: (a) the ~8.2% label-noise floor; (b) the mean-reversion regime the model
+  had learned weakened sharply in 2025 — reversed persistence on this same transition
+  scored ≈0.582 (persistence 0.419), so the model (≈ that rule + a little) landed at 0.574.
+  The step7-era yardstick of ~0.715 for reversed persistence was itself a 2024 backtest
+  artifact, not a stable property of the strategy.
+
+### 2. Frozen step7 model rolled forward (2025q1→q2 … 2025q4→2026q1)
+- **Pooled AUC 0.603** on 11,602 labeled Q≥2025q1 rows.
+- Per-quarter: **2025q1 0.636, 2025q2 0.732, 2025q3 0.593, 2025q4 0.429** — decaying with
+  distance from training and dipping BELOW 0.5 on the last transition (2025q4→2026q1),
+  where mean reversion itself inverted (raw persistence 0.551 beat the model there).
+
+### 3. Retrained on `_full` (train 2022q1–2024q3 = 11 transitions; test 2024q4–2025q4 = 5)
+- **Pooled test AUC 0.614, 95% CI [0.605, 0.623]** (fund-clustered bootstrap, 2,000 iter).
+- Persistence baseline **0.396** → the honest yardstick, **REVERSED persistence, is 0.604**:
+  the model's edge over the best naive rule is **~0.010** — statistically the raw-persistence
+  edge is huge (CI [0.200, 0.235], p(edge≤0)=0.0000) but that is mostly persistence being
+  upside-down again; against the reversed rule the model remains essentially a tie plus a
+  sliver, exactly the step7 finding, now at half the AUC level because 2025 was harder.
+- Per-quarter AUC (model / persistence): 2024q4 0.606/0.419, 2025q1 0.656/0.342,
+  2025q2 0.748/0.256, 2025q3 0.591/0.428, **2025q4 0.453/0.551** — model wins
+  **4/5 comparable quarters**; the one loss is the quarter where mean reversion flipped.
+- **Fund-disjoint check (adopted critique item): AUC 0.603** — seeded 80/20 fund split
+  (2,428 train / 607 test funds; 21,263/2,885 rows), same RF, same quarter boundary.
+  Within a hair of the pooled 0.614: no fund-identity memorization inflating the number.
+  Saved as metric `auc_fund_disjoint` in `full_model_eval`.
+
+### 4. Label stability on `_full`
+Mean flip rate **0.083**; **22.1%** of fund-quarters flip on >10% of peer-set draws
+(n=40,808 evaluated) — the same ~8% intrinsic label-noise floor as step7 (0.082/22.2%),
+now measured on a 1.8x larger population. Saved: `full_label_stability`.
+
+### 5. Dead funds present in the panel (survivorship-bias reduction verified)
+611 series' last filing < 2026q1; **1,870 labeled panel rows from 171 dead strategy-segment
+funds** are in `full_panel` (the other dead series are allocation-segment or fail the
+feature/label gates) — the relaxed rule is measurably biting; the count is > 0 as required.
+
+### 6. Carried-forward acceptance items (recorded earlier in this design)
+- Pool/segment/resolution counts: see `## Pool amendment` (12,871 attempted = 100%; 8,766
+  resolved; 3,231 `is_us_equity`; 8,062/704 and 3,035/196 strategy/allocation splits;
+  metadata-reuse hit-rate 100%, zero repeat Yahoo hits).
+- 17 quarters clustered at the re-validated **k=40**: see `### _full clustering + metrics
+  run` (purity 0.508–0.554 mean 0.535; ARI 0.201–0.258 mean 0.231).
+- Pipeline repair: `funds_full.segment` is now created reproducibly by
+  `build.ensure_funds_full_segment` (idempotent — this run found the column present and
+  left it untouched; a fresh ingestion would get it computed and logged).
+
+**UAT tally: all items recorded, honest whichever way — the committed predictions survived
+contact with reality above chance (0.574) but well below backtest, and the 2025 regime
+change is the documented reason.**
+
 ## UAT (acceptance)
 - New pool size under the relaxed rule recorded; 100% of candidates attempted; resolution,
   equity-flag, and segment counts reported; metadata reuse confirmed (zero repeat Yahoo
