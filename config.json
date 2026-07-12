@@ -57,5 +57,10 @@
     "model_name": "phi-4",
     "temperature": 0,
     "top_peers_to_narrate": 5
+  },
+  "fees": {
+    "rr_years": [2021, 2022, 2023, 2024, 2025, 2026],
+    "coverage_gate": 0.80,
+    "fund_disjoint_test_share": 0.20
   }
 }
