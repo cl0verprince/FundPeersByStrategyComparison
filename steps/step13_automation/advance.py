@@ -160,6 +160,9 @@ def _stage_ingest(cfg: dict) -> None:
 
 
 def _stage_cluster_and_metrics(cfg: dict) -> None:
+    # A fresh stage-2 ingest rewrites funds_full without `segment` (ingest never writes
+    # it); similarity's require_segment filter needs it now, not first at stage 5.
+    full_build.ensure_funds_full_segment(cfg)
     similarity.run(cfg, table_suffix="_full", n_clusters=cfg["full"]["n_clusters"],
                    top_n_peers=15, require_segment="strategy", save_coords=True)
     metrics.run(cfg, table_suffix="_full")

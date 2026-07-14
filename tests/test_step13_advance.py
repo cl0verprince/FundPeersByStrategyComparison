@@ -161,6 +161,7 @@ def test_cluster_stage_uses_full_n_clusters_not_similarity_default(monkeypatch):
     """The design's headline trap: similarity.run must receive n_clusters from
     full.n_clusters (40), never the dormant similarity.n_clusters default (15)."""
     calls = {}
+    monkeypatch.setattr(advance.full_build, "ensure_funds_full_segment", lambda cfg: None)
     monkeypatch.setattr(advance.similarity, "run",
                         lambda cfg, **kw: calls.update(kw))
     monkeypatch.setattr(advance.metrics, "run", lambda cfg, **kw: None)
@@ -173,3 +174,22 @@ def test_cluster_stage_uses_full_n_clusters_not_similarity_default(monkeypatch):
     assert calls["require_segment"] == "strategy"
     assert calls["save_coords"] is True
     assert calls["table_suffix"] == "_full"
+
+
+def test_cluster_stage_repairs_segment_before_clustering(monkeypatch):
+    """The first live run's crash: a fresh stage-2 ingest rewrites funds_full WITHOUT the
+    `segment` column (ingest never writes it), and stage 3's
+    similarity.run(require_segment="strategy") KeyErrors. step10's idempotent
+    ensure_funds_full_segment repair must therefore run before clustering — not first
+    at stage 5 inside full_build.run."""
+    order = []
+    monkeypatch.setattr(advance.full_build, "ensure_funds_full_segment",
+                        lambda cfg: order.append("segment_repair"))
+    monkeypatch.setattr(advance.similarity, "run",
+                        lambda cfg, **kw: order.append("similarity"))
+    monkeypatch.setattr(advance.metrics, "run",
+                        lambda cfg, **kw: order.append("metrics"))
+
+    advance._stage_cluster_and_metrics({"full": {"n_clusters": 40}})
+
+    assert order == ["segment_repair", "similarity", "metrics"]
