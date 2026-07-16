@@ -12,6 +12,10 @@ from fundspeers.io import load_table, save_table, table_exists
 
 log = logging.getLogger(__name__)
 
+PLACEHOLDER_NARRATIVE = (
+    "Narrative pending - LM Studio (phi-4) was unavailable when this dashboard was built. "
+    "Rerun the dashboard build with LM Studio serving phi-4 to generate it.")
+
 _SYSTEM_PROMPT = (
     "You are a financial-data narrator writing for a financial analyst or advisor. You are "
     "given computed facts about ONE peer group (cluster) of US equity mutual funds, grouped "
@@ -65,17 +69,31 @@ def get_narratives(cfg: dict, payload_clusters: list, mode: str = "cached",
     if missing:
         log.info(f"generating {len(missing)} narrative(s) via LM Studio "
                  f"({'regenerate' if mode == 'regenerate' else 'cache misses'})")
-        client = _get_client(cfg)
-        for cluster in missing:
-            cached[int(cluster["cluster_id"])] = generate_one(client, cfg, cluster)
+        # step13 design contract: an unreachable or broken LM Studio must never fail a
+        # dashboard build. Generation stops at the first error; unresolved clusters get a
+        # placeholder that is returned but NOT cached, so a later build with LM Studio
+        # healthy regenerates them.
+        generated = {}
+        try:
+            client = _get_client(cfg)
+            for cluster in missing:
+                generated[int(cluster["cluster_id"])] = generate_one(client, cfg, cluster)
+        except Exception as exc:
+            log.warning(f"LM Studio narrative generation failed ({exc}); using placeholders "
+                        f"for {len(missing) - len(generated)} cluster(s)")
+        cached.update(generated)
 
-        updated = pd.DataFrame(
-            [{"cluster_id": cid, "quarter": quarter, "narrative": text}
-             for cid, text in sorted(cached.items())])
-        if table_exists("dashboard_narratives", cfg):
-            existing = load_table("dashboard_narratives", cfg)
-            existing = existing[existing["quarter"] != quarter]
-            updated = pd.concat([existing, updated], ignore_index=True)
-        updated = updated.sort_values(["quarter", "cluster_id"]).reset_index(drop=True)
-        save_table(updated, "dashboard_narratives", cfg)
+        if generated:
+            updated = pd.DataFrame(
+                [{"cluster_id": cid, "quarter": quarter, "narrative": text}
+                 for cid, text in sorted(cached.items())])
+            if table_exists("dashboard_narratives", cfg):
+                existing = load_table("dashboard_narratives", cfg)
+                existing = existing[existing["quarter"] != quarter]
+                updated = pd.concat([existing, updated], ignore_index=True)
+            updated = updated.sort_values(["quarter", "cluster_id"]).reset_index(drop=True)
+            save_table(updated, "dashboard_narratives", cfg)
+
+        for cluster in missing:
+            cached.setdefault(int(cluster["cluster_id"]), PLACEHOLDER_NARRATIVE)
     return cached

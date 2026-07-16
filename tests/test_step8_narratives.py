@@ -4,7 +4,8 @@ import pandas as pd
 import pytest
 
 from fundspeers.io import load_table, save_table, table_exists
-from steps.step8_dashboard.narratives import build_cluster_prompt, get_narratives
+from steps.step8_dashboard.narratives import (
+    PLACEHOLDER_NARRATIVE, build_cluster_prompt, get_narratives)
 
 CLUSTER = {
     "cluster_id": 3, "short_title": "Leaning Large Blend", "dominant_category": "Large Blend",
@@ -40,14 +41,19 @@ def test_cached_mode_uses_cache_without_llm(cfg):
     assert out == {3: "From cache."}
 
 
-def test_cached_mode_fails_loudly_for_missing_cluster_without_llm(cfg, monkeypatch):
-    # Force an unreachable endpoint so this test exercises the loud-failure path regardless
-    # of whether LM Studio happens to be running on the host (task: tests must not depend on it).
+def test_broken_llm_yields_placeholder_not_failure(cfg, monkeypatch):
+    # step13 contract: an unreachable/broken LM Studio must never fail a dashboard build -
+    # the uncached cluster gets a placeholder, and the placeholder is NOT persisted, so a
+    # later build with LM Studio healthy regenerates it. (Replaces the pre-step13 fail-loud
+    # contract this test used to pin.)
     monkeypatch.setenv("LM_STUDIO_BASE_URL", "http://127.0.0.1:1/v1")
     save_table(pd.DataFrame([{"cluster_id": 99, "quarter": "2024q4",
                               "narrative": "other"}]), "dashboard_narratives", cfg)
-    with pytest.raises(Exception):   # cluster 3 uncached -> attempts LLM -> connection error
-        get_narratives(cfg, [CLUSTER], mode="cached")
+    out = get_narratives(cfg, [CLUSTER], mode="cached")
+    assert out[3] == PLACEHOLDER_NARRATIVE
+
+    tbl = load_table("dashboard_narratives", cfg)
+    assert 3 not in tbl["cluster_id"].tolist()  # placeholder never cached
 
 
 def test_cache_save_preserves_other_quarters(cfg, monkeypatch):

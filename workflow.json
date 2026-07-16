@@ -47,6 +47,10 @@
     {
       "name": "step12_dashboard_full_rebuild",
       "status": "done"
+    },
+    {
+      "name": "step13_automation",
+      "status": "awaiting_approval"
     }
   ]
 }
