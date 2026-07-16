@@ -71,6 +71,12 @@ explanations of each grouping and prediction.
    feature importances → step4_predict/design.md
 6. **step5_narrate** — Given a fund, retrieve its cluster/peers/metrics/prediction and have phi-4
    (LM Studio API) emit a grounded plain-English explanation → step5_narrate/design.md
+7. **step14_webapp** — Public dynamic dashboard, part 1: ~10 MB extract builder (precomputed
+   honest views incl. the model-health singleton), NiceGUI app shell + global fuzzy search +
+   Fund page + Model-health page + Methodology, deployed to a Hugging Face Space
+   → step14_webapp/design.md
+8. **step15_webapp_explorer** — Public dynamic dashboard, part 2: cluster explorer + cluster
+   detail + home page on the same app/extract → step15_webapp_explorer/design.md
 
 # Process
 Built with the step-wise-methodology: contract-first; one numbered step at a time; each step has its

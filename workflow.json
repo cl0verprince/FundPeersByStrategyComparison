@@ -51,6 +51,14 @@
     {
       "name": "step13_automation",
       "status": "done"
+    },
+    {
+      "name": "step14_webapp",
+      "status": "in_progress"
+    },
+    {
+      "name": "step15_webapp_explorer",
+      "status": "pending"
     }
   ]
 }
