@@ -36,15 +36,21 @@ quarterly data set, ingest it, advance the pipeline, rebuild the dashboard, and 
    entry; render docs; commit everything with a standard message. Never push without the
    configured flag (`--push` off by default).
 
-## The scheduled vehicle (primary)
-A **Claude Code scheduled cloud routine** (created via /schedule), monthly cadence:
-prompt = "run the FundsPeersStrategy advance-quarter refresh: probe for a new N-PORT
-quarter; if none, stop; if found, execute steps/step13_automation/advance per its runbook,
-verify the UAT checklist in its design, commit (no push), and report the quarter's
-out-of-time numbers." The routine runs in a cloud sandbox with the repo; secrets
-(SEC_USER_AGENT) via the routine's env. LM Studio is unavailable in the cloud → narratives
-placeholders for new clusters, regenerated locally on demand (documented behavior, not an
-error).
+## The scheduled vehicle (primary) — REVISED at the gate (2026-07-16)
+As designed, the routine would have run the full refresh in the cloud. The first live run
+exposed the data-locality constraint: a cloud sandbox gets only the git checkout, but the
+5.6 GB DuckDB, the cached N-PORT ZIPs, and the ~137k resolved Yahoo lookups are local-only
+(gitignored) — a from-scratch cloud rebuild is hours of rate-limited re-resolution, and a
+commit-without-push dies with the sandbox.
+
+The scheduled vehicle is therefore a **probe-and-notify cloud routine**
+(`trig_014DJXd45LMNXuwhUTzoMR6i`, monthly, 1st at 06:00 UTC): it HEAD-probes the next
+N-PORT quarter's URL (probing forward from the last quarter known at creation; its report
+is advisory) and reports "published — run the advance locally" or "nothing new". The
+refresh itself is the **local on-demand run** of `advance.py`, where the data lives. LM
+Studio narrative behavior on refresh: new clusters get real narratives when phi-4 is up,
+placeholders otherwise — never a failure (enforced in narratives.py since commit 971590d;
+placeholders are not cached, so a later healthy build regenerates them).
 
 ## Out of scope
 - Auto-push (human reviews the refresh commit before publishing).
@@ -55,5 +61,7 @@ error).
 - `advance` on the current state (no new quarter) exits 0 with "nothing new" logged.
 - A dry-run flag (`--dry-run`) prints the plan (which quarter, which steps) without writing.
 - The runbook checklist in this design is encoded in the module docstring.
-- A scheduled routine exists, monthly, with the prompt above; its first live run is
-  expected ~2026-09 (2026q2 data set publication window).
+- A scheduled routine exists, monthly (probe-and-notify form; see the revised section
+  above). MET 2026-07-16. The full refresh's own first live run happened early — 2026q2
+  published ahead of the expected ~2026-09 window and was refreshed successfully after
+  two live-run fixes (commits 834156c, 971590d).
