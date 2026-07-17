@@ -126,6 +126,21 @@ def fund_disjoint_auc(cfg: dict) -> float:
     return auc
 
 
+def run_retired(cfg: dict) -> None:
+    """Retired-model refresh (design step16): keep the falsifiable record growing -
+    segment repair, frozen out-of-time scoring, label-stability - and nothing that
+    trains or emits new predictions."""
+    log.info("=== step10 (RETIRED): pipeline repair (funds_full.segment) ===")
+    ensure_funds_full_segment(cfg)
+    log.info("=== step10 (RETIRED): out-of-time scoring of the frozen model ===")
+    published = score_published_forward_predictions(cfg)
+    frozen = score_frozen_model_rolled_forward(cfg)
+    _write_oot_validation(published, frozen, cfg)
+    log.info("=== step10 (RETIRED): label-stability study ===")
+    run_stability(cfg, table_suffix="_full", output_table="full_label_stability")
+    log.info("frozen record updated; no retraining, no new forward predictions (model retired)")
+
+
 def run(cfg: dict) -> None:
     # 0. Pipeline repair: ensure funds_full carries the segment column (reproducibly).
     log.info("=== step10: pipeline repair (funds_full.segment) ===")

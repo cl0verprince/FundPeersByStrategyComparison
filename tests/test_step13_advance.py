@@ -193,3 +193,39 @@ def test_cluster_stage_repairs_segment_before_clustering(monkeypatch):
     advance._stage_cluster_and_metrics({"full": {"n_clusters": 40}})
 
     assert order == ["segment_repair", "similarity", "metrics"]
+
+
+# --- _stage_evaluate: retired path (design step16) vs. current non-retired path ---
+
+
+def _boom(*_a, **_k):
+    raise AssertionError("must not be called on the retired path")
+
+
+def test_stage_evaluate_retired_calls_run_retired_not_fees(monkeypatch):
+    calls = []
+    monkeypatch.setattr(advance.full_build, "run_retired",
+                        lambda cfg: calls.append("run_retired"))
+    monkeypatch.setattr(advance.full_build, "run", _boom)
+    monkeypatch.setattr(advance.fees_evaluate, "run_evaluation", _boom)
+
+    cfg = {"model": {"retirement": {"as_of": "2026q1",
+                                     "statement": "Retired for the test record."}}}
+    result = advance._stage_evaluate(cfg)
+
+    assert calls == ["run_retired"]
+    assert result == {"retired": True}
+
+
+def test_stage_evaluate_non_retired_calls_full_run_and_fees(monkeypatch):
+    calls = []
+    monkeypatch.setattr(advance.full_build, "run", lambda cfg: calls.append("run"))
+    monkeypatch.setattr(advance.full_build, "run_retired", _boom)
+    monkeypatch.setattr(advance.fees_evaluate, "run_evaluation",
+                        lambda cfg: calls.append("run_evaluation") or {"coverage": 0.9})
+
+    cfg = {"model": {"rf": {"n_estimators": 10, "max_depth": 3, "min_samples_leaf": 5}}}
+    result = advance._stage_evaluate(cfg)
+
+    assert calls == ["run", "run_evaluation"]
+    assert result == {"coverage": 0.9}

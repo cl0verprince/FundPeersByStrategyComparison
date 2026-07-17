@@ -176,6 +176,11 @@ def _stage_fees(cfg: dict) -> dict:
 
 
 def _stage_evaluate(cfg: dict) -> dict:
+    if cfg.get("model", {}).get("retirement"):
+        log.info("model retired (%s) - scoring frozen only, no retrain/fees eval",
+                 cfg["model"]["retirement"]["as_of"])
+        full_build.run_retired(cfg)
+        return {"retired": True}
     full_build.run(cfg)
     return fees_evaluate.run_evaluation(cfg)
 
