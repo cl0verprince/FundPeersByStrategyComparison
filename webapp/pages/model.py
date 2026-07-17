@@ -23,12 +23,34 @@ def render_model(store) -> None:
         "text-2xl font-semibold")
     honesty.freshness_stamp(prov)
 
+    retired = health["health_state"] == "retired"
     icon, label, token = STATUS[health["health_state"]]
     with ui.card().classes("w-full p-4 border-2").style(f"border-color:{t[token]}"):
-        ui.label(f"{icon} {label}").classes("text-xl font-semibold").style(
-            f"color:{t[token]}")
-        ui.label(health["rule_text"]).classes("text-sm")
-        ui.label(f"The rule: {health['rule_text']}").classes("text-xs text-gray-500")
+        if retired:
+            # Muted/ink treatment (STATUS["retired"] token is "muted", not "critical") -
+            # a fact, not an alarm; never the red border-2 the degraded/weak states get.
+            ui.label(f"{icon} RETIRED as of {health.get('retired_as_of', '')}").classes(
+                "text-xl font-semibold").style(f"color:{t[token]}")
+            ui.label(str(health.get("retirement_statement") or health["rule_text"])
+                     ).classes("text-sm")
+        else:
+            ui.label(f"{icon} {label}").classes("text-xl font-semibold").style(
+                f"color:{t[token]}")
+            ui.label(health["rule_text"]).classes("text-sm")
+            ui.label(f"The rule: {health['rule_text']}").classes("text-xs text-gray-500")
+
+    if retired:
+        ui.label("Since retirement").classes("text-lg font-semibold mt-4")
+        record = store.retirement_record()
+        if len(record):
+            ui.table(rows=record.round(3).to_dict("records"))
+        else:
+            ui.label(
+                "First post-retirement score expected ~Nov 2026 (when the next N-PORT "
+                "data set publishes). The frozen model's predictions are scored against "
+                "reality every quarter; this record is what would justify — or refute — "
+                "this retirement."
+            ).classes("text-sm text-gray-700 max-w-2xl")
 
     ui.label("Realized AUC by quarter vs baselines").classes("text-lg font-semibold mt-4")
     dfq = store.model_quarters()
@@ -72,17 +94,25 @@ def render_model(store) -> None:
 
     # Forward book: what the model is saying right now, with nothing to compare it to yet.
     ui.label("Forward book").classes("text-lg font-semibold mt-4")
-    probs = store.forward_probabilities()
-    n = len(probs)
-    ui.echart(charts.histogram_option("light", list(probs))).classes("w-full h-56")
-    ui.label(
-        f"Distribution of {n} live, uncommitted-outcome probabilit{'y' if n == 1 else 'ies'} "
-        "in the current forward book. None of these outcomes are known yet: they will be "
-        "scored against actual returns once next quarter's N-PORT filings post, and folded "
-        "into the calibration and prediction-history charts above."
-    ).classes("text-xs text-gray-500")
+    if retired:
+        ui.label("No live forward book — the model is retired; no new predictions are "
+                 "generated.").classes("text-sm text-gray-700")
+    else:
+        probs = store.forward_probabilities()
+        n = len(probs)
+        ui.echart(charts.histogram_option("light", list(probs))).classes("w-full h-56")
+        ui.label(
+            f"Distribution of {n} live, uncommitted-outcome "
+            f"probabilit{'y' if n == 1 else 'ies'} in the current forward book. None of "
+            "these outcomes are known yet: they will be scored against actual returns "
+            "once next quarter's N-PORT filings post, and folded into the calibration "
+            "and prediction-history charts above."
+        ).classes("text-xs text-gray-500")
 
-    ui.label("Open question, published: two consecutive below-chance quarters is under "
-             "investigation; the signal may be retired or retrained."
-             ).classes("text-sm font-semibold mt-2")
+    if retired:
+        ui.label("Resolved 2026-07-17: retired.").classes("text-sm font-semibold mt-2")
+    else:
+        ui.label("Open question, published: two consecutive below-chance quarters is under "
+                 "investigation; the signal may be retired or retrained."
+                 ).classes("text-sm font-semibold mt-2")
     honesty.disclaimer_line()

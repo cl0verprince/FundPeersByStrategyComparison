@@ -49,8 +49,11 @@ def render_fund(store, ticker: str) -> None:
             honesty.status_chip(health)
 
     with ui.row().classes("w-full gap-4 items-start"):
-        # Zone A
-        if is_active:
+        # Zone A: retired takes precedence for ALL funds (dead funds keep their archive
+        # banner above it; the banner's "No forward prediction exists" line stays true).
+        if health["health_state"] == "retired":
+            honesty.retirement_card(health)
+        elif is_active:
             pred = store.fund_prediction(sid)
             reason = None if pred else "insufficient coverage this quarter"
             honesty.probability_card(pred, health, reason=reason)
