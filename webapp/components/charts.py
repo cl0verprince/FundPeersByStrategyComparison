@@ -111,7 +111,7 @@ def histogram_option(mode, values, bins=20):
     t, opt = _base(mode)
     counts = [0] * bins
     for v in values:
-        counts[min(bins - 1, int(float(v) * bins))] += 1
+        counts[max(0, min(bins - 1, int(float(v) * bins)))] += 1
     opt["tooltip"] = {"trigger": "item"}
     opt["xAxis"] = {"type": "category",
                     "data": [f"{i / bins:.0%}" for i in range(bins)],
