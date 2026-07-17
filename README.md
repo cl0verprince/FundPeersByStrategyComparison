@@ -111,3 +111,37 @@ Distilled from `techniques.json`:
 - **Monte Carlo as an honesty layer, not a return simulator.** Simulating fund returns would mean *assuming* a return-generating process — replacing measured patterns with analyst assumptions. Instead MC quantifies uncertainty *in the evaluation*: a bootstrap CI on the headline AUC, a paired significance test of the edge over the naive rule, and the label-noise floor study.
 - **Clusters validated against an independent label.** Internal cohesion metrics (silhouette, inertia) can be optimized by any clustering. Scoring against third-party fund categories (via chance-corrected adjusted Rand index) is a check the clustering cannot game.
 - **kNN-peer median labels, not cluster-median.** "Below your cluster's median" silently degraded as the universe grew (12 close peers became 60+ heterogeneous ones). Defining the benchmark as each fund's own top-10 cosine peers makes it constant-size by construction — the root-cause fix, not a per-population patch.
+
+## Model retired (2026-07-17)
+
+The arc, followed all the way to its end: **0.717 backtest → 0.574 committed-forward
+reality → 0.457 (2025q4→2026q1) → 0.427 (2026q1→2026q2)**, two consecutive realized
+quarters below the 0.50 coin-flip. In the same two quarters the reversed-persistence
+(mean-reversion) baseline flipped **positive** — 0.552 and 0.569 — the opposite of what
+had held throughout 2024–2025.
+
+**Diagnosis, stated plainly:** the model had mostly learned mean reversion, not a
+durable predictive signal — this was visible as early as the 0.604 mean-reversion
+baseline it barely beat in-sample. When the market regime flipped from mean-reversion
+to momentum in late 2025, the one rule the model had learned inverted, and its
+predictions inverted with it.
+
+**The retirement is falsifiable, not final.** The frozen model is not deleted and does
+not stop being graded: every quarterly refresh continues to score it against whatever
+actually happens next, and publishes the result. What changes is that no new live
+predictions are generated or presented as actionable — the refresh scores the frozen
+model only (no retraining, no new forward book, no with-fees re-evaluation).
+
+The statement recorded in `config.json` (`model.retirement`):
+
+> Retired after two consecutive realized quarters below the 0.5 coin-flip (0.457,
+> 0.427) while the mean-reversion baseline inverted. The model had largely learned
+> mean-reversion; when the market regime flipped to momentum in late 2025 the signal
+> inverted. The frozen model continues to be scored against reality each quarter below
+> - if that record shows sustained recovery, retirement will be revisited.
+
+**Where to watch it:** the webapp's `/model` page ("Since retirement" section, backed by
+the `oot_validation` table's `frozen_rolled_forward` rows for quarters after 2026q2) and
+this repo's static dashboard both carry a standing record — one row added every quarter,
+forever, whether the news is good or bad. The reopening condition is stated in prose, on
+purpose, not automated: sustained recovery in that record, not a single good quarter.

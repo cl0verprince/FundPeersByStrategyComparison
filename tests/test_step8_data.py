@@ -142,6 +142,17 @@ def test_oot_fields_read_from_oot_validation(cfg, tables):
         {"quarter": "2024q4", "auc": 0.47}, {"quarter": "2025q1", "auc": 0.61}]
 
 
+def test_scorecard_carries_retirement_when_cfg_has_it(cfg, tables):
+    cfg["model"] = {"retirement": {"as_of": "2026q2", "statement": "Retired: see the record."}}
+    sc = build_payload(cfg, narratives={})["scorecard"]
+    assert sc["retirement"] == {"as_of": "2026q2", "statement": "Retired: see the record."}
+
+
+def test_scorecard_retirement_absent_when_cfg_lacks_it(cfg, tables):
+    sc = build_payload(cfg, narratives={})["scorecard"]
+    assert sc["retirement"] is None
+
+
 def test_suffix_path_reads_full_universe_tables(cfg):
     # The _full generalization: same builder, tables under a different suffix, unified_*
     # tables passed by name. Uses distinct sentinel table names to prove nothing falls back

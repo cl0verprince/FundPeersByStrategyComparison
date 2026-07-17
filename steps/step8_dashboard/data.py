@@ -186,6 +186,7 @@ def build_payload(cfg: dict, narratives: dict, table_suffix: str = "_all",
             "per_quarter": per_quarter,
             "mean_flip_rate": _none_if_na(stability["flip_rate"].mean())
                               if len(stability) else None,
+            "retirement": cfg.get("model", {}).get("retirement"),
             **_read_oot_validation(cfg),
         },
         "coords": [{"sid": r["series_id"], "x": round(float(r["x"]), 4),

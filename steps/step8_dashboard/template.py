@@ -284,6 +284,13 @@ TEMPLATE = r"""<!doctype html>
   .oot-note { color: var(--ink-2); font-size: .88rem; margin: .5rem 0 0;
     display: flex; align-items: flex-start; gap: .45rem; }
   .oot-note .flag { color: var(--critical); font-weight: 700; }
+  .oot-retired {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: .65rem .8rem; margin: 0 0 .85rem; color: var(--ink-2);
+  }
+  .oot-retired .oot-retired-head { margin: 0 0 .3rem; font-weight: 700; color: var(--ink-2); }
+  .oot-retired p { margin: 0 0 .3rem; }
+  .oot-retired p:last-child { margin-bottom: 0; }
 
   /* ---- footer ---- */
   footer#disclaimer {
@@ -597,9 +604,17 @@ function renderOOTPanel(s) {
   const hasPub = (pub !== null && pub !== undefined);
   const pq = Array.isArray(s.oot_frozen_per_quarter) ? s.oot_frozen_per_quarter : [];
   const hasStrip = pq.length > 0;
-  if (!hasPub && !hasStrip) return null;                 // absent -> panel simply not rendered
+  const retirement = s.retirement;
+  if (!hasPub && !hasStrip && !retirement) return null;   // absent -> panel simply not rendered
 
   const card = el("div", { class: "card oot" });
+  if (retirement) {
+    const banner = el("div", { class: "oot-retired" });
+    banner.appendChild(txt("p", "✕ MODEL RETIRED as of " + retirement.as_of,
+      "oot-retired-head"));
+    banner.appendChild(txt("p", retirement.statement));
+    card.appendChild(banner);
+  }
   card.appendChild(txt("p", "Out-of-time reality check", "eyebrow"));
   card.appendChild(txt("h2", "How the model held up on data it had never seen"));
   card.appendChild(txt("p",
