@@ -39,6 +39,8 @@ async def test_dead_fund_is_archive_not_error(user: User):
     await user.open("/fund/DDDDX")
     await user.should_see("left the universe")
     await user.should_see("No forward prediction")
+    # no outlook card on a dead fund, but the model-health chip must still be present
+    await user.should_see("Signal degraded")
 
 
 async def test_unknown_ticker_offers_search(user: User):

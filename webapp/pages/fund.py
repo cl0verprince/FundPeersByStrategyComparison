@@ -31,9 +31,10 @@ def render_fund(store, ticker: str) -> None:
             "text-2xl font-semibold")
         if header.get("cluster_name"):
             ui.link(f"● {header['cluster_name']}", "/methodology#clusters").classes("text-sm")
+    na = header["net_assets"]
+    assets = "—" if na is None or na != na else f"${na / 1e9:.1f}B"
     ui.label(f"{header['yahoo_category'] or '—'} · "
-             f"${(header['net_assets'] or 0) / 1e9:.1f}B net assets").classes(
-        "text-sm text-gray-600")
+             f"{assets} net assets").classes("text-sm text-gray-600")
     honesty.freshness_stamp(prov, fund_last_quarter=header["last_quarter"])
 
     # Edge state: dead fund -> archive banner instead of outlook
@@ -44,6 +45,8 @@ def render_fund(store, ticker: str) -> None:
             ui.label(f"⚑ This fund left the universe after {header['last_quarter']} — "
                      "final quarters shown; No forward prediction exists."
                      ).classes("text-sm font-semibold")
+            # No outlook card on a dead fund, so the model-health context rides here.
+            honesty.status_chip(health)
 
     with ui.row().classes("w-full gap-4 items-start"):
         # Zone A
@@ -91,8 +94,12 @@ def render_fund(store, ticker: str) -> None:
                  ).classes("text-xs text-gray-500")
         ui.aggrid({
             "columnDefs": [
+                # Real <a> links (design rule for Zone D): new-tab / right-click must
+                # work. Tickers are alphanumeric SEC tickers, so no escaping risk —
+                # never do this string-built renderer for free-text fields like names.
                 {"headerName": "Ticker", "field": "peer_ticker",
-                 "cellRenderer": "agGroupCellRenderer"},
+                 ":cellRenderer": "params => '<a href=\"/fund/' + params.value + '\" "
+                                  "class=\"no-underline\">' + params.value + '</a>'"},
                 {"headerName": "Name", "field": "peer_name", "flex": 2},
                 {"headerName": "Similarity", "field": "cosine_similarity",
                  "valueFormatter": "value == null ? '—' : (value*100).toFixed(0) + '%'"},
@@ -103,8 +110,7 @@ def render_fund(store, ticker: str) -> None:
             ],
             "rowData": peers.to_dict("records"),
             "defaultColDef": {"sortable": True, "resizable": True},
-        }).classes("w-full").on("cellClicked",
-                                lambda e: ui.navigate.to(f"/fund/{e.args['data']['peer_ticker']}"))
+        }).classes("w-full")
 
     # Prediction history - the per-fund misses table
     hist = store.fund_prediction_history(sid)
@@ -146,7 +152,7 @@ def _kpi_tiles(ts: pd.DataFrame, pct: dict) -> None:
             with ui.card().classes("p-3"):
                 ui.label(label + " (in cluster)").classes("text-xs text-gray-500")
                 ui.label("n/a — cluster too small" if v is None or v != v
-                         else f"{float(v) * 100:.0f}").classes("text-xl font-semibold")
+                         else f"{float(v) * 100:.0f}/100").classes("text-xl font-semibold")
 
 
 def _search_box(store) -> None:
