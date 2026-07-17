@@ -45,7 +45,11 @@ def score_query(query: str, index: list) -> list:
             tier = 4
         if not row["is_active"]:
             tier += 1
-        scored.append((tier, -(row["net_assets"] or 0), row))
+        aum = row["net_assets"]
+        # NaN-safe: pandas df().to_dict gives float NaN for missing AUM (truthy, and
+        # NaN sort keys make ordering undefined). Treat None/NaN as 0.
+        aum = 0.0 if aum is None or aum != aum else float(aum)
+        scored.append((tier, -aum, row))
     scored.sort(key=lambda t: (t[0], t[1]))
     return [r for _, _, r in scored]
 
