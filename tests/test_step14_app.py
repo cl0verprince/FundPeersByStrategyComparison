@@ -60,3 +60,14 @@ async def test_methodology_has_disclaimer_and_survivorship(user: User):
     await user.open("/methodology")
     await user.should_see("not investment advice")
     await user.should_see("Dead funds are included")
+
+
+async def test_root_shows_hero_search_and_status_card(user: User):
+    await user.open("/")
+    await user.should_see("Search")
+    await user.should_see("Signal degraded")
+
+
+async def test_header_disclaimer_on_every_page(user: User):
+    await user.open("/model")
+    await user.should_see("not investment advice")
