@@ -59,6 +59,10 @@
     {
       "name": "step15_webapp_explorer",
       "status": "pending"
+    },
+    {
+      "name": "step16_model_retirement",
+      "status": "in_progress"
     }
   ]
 }

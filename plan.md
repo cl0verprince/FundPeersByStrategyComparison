@@ -77,6 +77,10 @@ explanations of each grouping and prediction.
    → step14_webapp/design.md
 8. **step15_webapp_explorer** — Public dynamic dashboard, part 2: cluster explorer + cluster
    detail + home page on the same app/extract → step15_webapp_explorer/design.md
+9. **step16_model_retirement** — Retire the lag-probability model publicly and falsifiably:
+   retirement as config-driven state (chip/fund pages/model page/static dashboard/README),
+   refresh switches to score-frozen-only, a growing "since retirement" public record
+   → step16_model_retirement/design.md
 
 # Process
 Built with the step-wise-methodology: contract-first; one numbered step at a time; each step has its
