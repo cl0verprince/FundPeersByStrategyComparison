@@ -57,6 +57,7 @@ from steps.step9_fees_turnover import evaluate as fees_evaluate
 from steps.step9_fees_turnover import fees as fees_fees
 from steps.step9_fees_turnover import parse as fees_parse
 from steps.step10_full_universe import build as full_build
+from steps.step14_webapp import extract as webapp_extract
 
 log = logging.getLogger(__name__)
 
@@ -186,6 +187,7 @@ def _stage_dashboard(cfg: dict) -> None:
                         predictions_table="full_predictions",
                         eval_table="full_model_eval",
                         stability_table="full_label_stability")
+    webapp_extract.run(cfg)  # keep the hosted app's extract in sync (deploy stays manual)
 
 
 def _stage_docs_and_commit(cfg: dict, new_quarter: str, summary: dict, push: bool) -> None:
