@@ -63,7 +63,9 @@ def auc_by_quarter_option(mode, df: pd.DataFrame):
     opt["yAxis"] = {"type": "value", "min": 0.3, "max": 0.8,
                     "splitLine": {"lineStyle": {"color": t["grid"], "type": "solid"}},
                     "axisLabel": {"color": t["ink2"]}}
-    model_pts = [{"value": float(a),
+    # Display precision: AUC to 3 decimals (the spec's precision-honesty rule) - the
+    # endLabel prints the series value verbatim, so round at the data layer.
+    model_pts = [{"value": round(float(a), 3),
                   "itemStyle": {"color": t["critical"] if a < 0.5 else t["s1"]}}
                  for a in df["auc"]]
     opt["series"] = [
@@ -76,7 +78,7 @@ def auc_by_quarter_option(mode, df: pd.DataFrame):
                                 "label": {"formatter": "coin flip (0.5)",
                                           "color": t["ink2"]}}]}},
         {"name": "Mean-reversion rule", "type": "line",
-         "data": [float(v) if pd.notna(v) else None for v in df["persistence_auc"]],
+         "data": [round(float(v), 3) if pd.notna(v) else None for v in df["persistence_auc"]],
          "connectNulls": False, "lineStyle": {"width": 2, "color": t["demph"]},
          "itemStyle": {"color": t["demph"]}, "symbolSize": 4,
          "endLabel": {"show": True, "color": t["ink2"]}},
