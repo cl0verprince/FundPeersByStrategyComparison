@@ -331,25 +331,14 @@ def build_cluster_views(src: duckdb.DuckDBPyConnection) -> dict:
             "v_cluster_map": v_cluster_map}
 
 
-def run(cfg: dict, out_path=None):
-    """Build all views from the real pipeline DB and write webapp/data/extract.duckdb."""
+def write_extract(views: dict, out_path) -> None:
+    """Write a dict of {view_name: DataFrame} to a fresh duckdb file at out_path."""
     from pathlib import Path
-    from fundspeers.config import PROJECT_ROOT
-    from fundspeers.io import db_path
 
-    out_path = Path(out_path) if out_path else PROJECT_ROOT / "webapp" / "data" / "extract.duckdb"
+    out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if out_path.exists():
         out_path.unlink()
-
-    src = duckdb.connect(str(db_path(cfg)), read_only=True)
-    try:
-        views = {}
-        views.update(build_fund_views(src))
-        views.update(build_model_views(src, cfg))
-        views.update(build_cluster_views(src))
-    finally:
-        src.close()
 
     dst = duckdb.connect(str(out_path))
     try:
@@ -364,6 +353,26 @@ def run(cfg: dict, out_path=None):
     log.info("extract written: %s (%.1f MB)", out_path, size_mb)
     if size_mb > 50:
         raise RuntimeError(f"extract is {size_mb:.0f} MB - over the 50 MB budget")
+
+
+def run(cfg: dict, out_path=None):
+    """Build all views from the real pipeline DB and write webapp/data/extract.duckdb."""
+    from pathlib import Path
+    from fundspeers.config import PROJECT_ROOT
+    from fundspeers.io import db_path
+
+    out_path = Path(out_path) if out_path else PROJECT_ROOT / "webapp" / "data" / "extract.duckdb"
+
+    src = duckdb.connect(str(db_path(cfg)), read_only=True)
+    try:
+        views = {}
+        views.update(build_fund_views(src))
+        views.update(build_model_views(src, cfg))
+        views.update(build_cluster_views(src))
+    finally:
+        src.close()
+
+    write_extract(views, out_path)
     return out_path
 
 
