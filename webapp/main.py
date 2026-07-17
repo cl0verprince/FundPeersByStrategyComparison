@@ -37,7 +37,8 @@ def omnibox(store) -> None:
         def on_change(e) -> None:
             results.clear()
             hits = store.search(e.value or "", limit=8)
-            results.classes(remove="hidden" if hits else None, add=None if hits else "hidden")
+            show = bool(hits) or bool(e.value or "")
+            results.classes(remove="hidden" if show else None, add=None if show else "hidden")
             with results:
                 for h in hits:
                     tag = "" if h["is_active"] else f" (left universe {h['last_quarter']})"
@@ -49,8 +50,18 @@ def omnibox(store) -> None:
 
         box = ui.input(placeholder=f"Search {len(store.index)} funds by ticker or name…",
                        on_change=on_change).props("dense outlined debounce=120").classes("w-96")
-    ui.keyboard(on_key=lambda e: box.run_method("focus")
-                if e.key == "k" and e.modifiers.ctrl and e.action.keydown else None)
+    def on_key(e) -> None:
+        # Ctrl+K or plain "/" focuses the search box (design shortcut). No cheap way to
+        # detect "an input already has focus" from NiceGUI's KeyEventArguments, so "/"
+        # will also fire while typing in another field — accepted per review guidance.
+        if not e.action.keydown:
+            return
+        if e.key == "k" and e.modifiers.ctrl:
+            box.run_method("focus")
+        elif e.key == "/" and not (e.modifiers.ctrl or e.modifiers.alt or e.modifiers.meta):
+            box.run_method("focus")
+
+    ui.keyboard(on_key=on_key)
 
 
 @contextmanager

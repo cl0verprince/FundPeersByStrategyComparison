@@ -11,6 +11,7 @@ the HF Space is a separate, human-gated action (steps/step14_webapp/deploy.py).
 import logging
 import re
 import unicodedata
+from datetime import datetime, timezone
 
 import duckdb
 import pandas as pd
@@ -261,6 +262,7 @@ def build_model_views(src: duckdb.DuckDBPyConnection, cfg) -> dict:
         "SELECT avg(flip_rate) FROM full_label_stability").fetchone()[0]
     refreshed = src.execute(
         "SELECT max(refreshed_at) FROM refresh_log").fetchone()[0]
+    built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     v_model_health_current = pd.DataFrame([{
         "health_state": state, "rule_text": rule_text,
         "last_scored_quarter": retrained["quarter"].max() if len(retrained) else None,
@@ -283,7 +285,7 @@ def build_model_views(src: duckdb.DuckDBPyConnection, cfg) -> dict:
     """).df()
 
     v_data_provenance = pd.DataFrame([{
-        "last_quarter": asof, "refreshed_at": refreshed,
+        "last_quarter": asof, "refreshed_at": built_at,
         "n_funds": int(src.execute(
             "SELECT count(DISTINCT series_id) FROM funds_full").fetchone()[0]),
     }])

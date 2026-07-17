@@ -81,6 +81,13 @@ def test_model_views_from_synthetic(model_src):
     assert set(hist["split"]) <= {"test", "train"}
     calib = views["v_calibration_bins"]
     assert (calib["n"] > 0).all()
+    # v_data_provenance's "extract built" stamp is the build time, not the refresh_log row
+    # (that row feeds v_model_health_current.refreshed_at instead) - see step14 final review.
+    prov = views["v_data_provenance"]
+    built_at = prov.iloc[0]["refreshed_at"]
+    assert built_at is not None
+    pd.Timestamp(built_at)  # parses as ISO timestamp
+    assert built_at != "2026-07-16T06:45:21+00:00"  # the synthetic refresh_log value
 
 
 @pytest.fixture
