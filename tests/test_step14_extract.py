@@ -105,3 +105,65 @@ def test_peer_display_joins_names_and_fees(src):
     assert row["peer_ticker"] == "BBBBX"
     assert row["peer_name"] == "Beta Small Value Fund"
     assert row["peer_expense_net"] == pytest.approx(0.0110)
+
+
+from steps.step14_webapp.extract import compute_health_state
+
+
+def test_health_state_rule_truth_table():
+    # oldest-first [(auc, persistence_auc), ...] for the last two realized quarters
+    assert compute_health_state([(0.60, 0.55), (0.62, 0.55)])[0] == "healthy"
+    assert compute_health_state([(0.55, 0.57), (0.56, 0.57)])[0] == "weak"     # above 0.5, below baseline
+    assert compute_health_state([(0.55, 0.50), (0.42, 0.57)])[0] == "degraded" # one below coin-flip
+    assert compute_health_state([(0.42, 0.57), (0.41, 0.57)])[0] == "degraded"
+    state, rule_text = compute_health_state([(0.42, 0.57), (0.41, 0.57)])
+    assert "0.5" in rule_text  # the rule is disclosed, not proprietary
+
+
+def test_model_views_from_synthetic(model_src):
+    from steps.step14_webapp.extract import build_model_views
+    views = build_model_views(model_src, cfg=None)  # cfg only needed for tree intervals; None skips
+    cur = views["v_model_health_current"]
+    assert len(cur) == 1
+    assert cur.iloc[0]["health_state"] in ("healthy", "weak", "degraded")
+    pred = views["v_fund_prediction_current"].set_index("series_id")
+    assert "A" in pred.index and 0.0 <= pred.loc["A", "predicted_probability"] <= 1.0
+    hist = views["v_fund_prediction_history"]
+    assert set(hist["split"]) <= {"test", "train"}
+    calib = views["v_calibration_bins"]
+    assert (calib["n"] > 0).all()
+
+
+@pytest.fixture
+def model_src(tmp_path):
+    con = duckdb.connect(str(tmp_path / "msrc.duckdb"))
+    con.register("preds", pd.DataFrame([
+        ("A", "2026q2", 0.41, None, "forward"),
+        ("A", "2026q1", 0.70, 1.0, "test"), ("A", "2025q4", 0.30, 0.0, "test"),
+        ("B", "2026q2", 0.55, None, "forward"),
+        ("B", "2026q1", 0.20, 1.0, "test"),
+    ], columns=["series_id", "quarter", "predicted_probability", "actual_label", "split"]))
+    con.execute("CREATE TABLE full_predictions AS SELECT * FROM preds")
+    con.register("ev", pd.DataFrame([
+        ("auc_pooled", "", 0.578), ("auc_pooled", "2025q4", 0.457), ("auc_pooled", "2026q1", 0.427),
+        ("auc_persistence_baseline", "2025q4", 0.552), ("auc_persistence_baseline", "2026q1", 0.569),
+    ], columns=["metric", "quarter", "value"]))
+    con.execute("CREATE TABLE full_model_eval AS SELECT * FROM ev")
+    con.register("oot", pd.DataFrame([
+        ("auc", "", 0.574, "published_forward"), ("base_rate", "", 0.532, "published_forward"),
+        ("n_scored", "", 2057.0, "published_forward"),
+        ("auc", "2026q1", 0.418, "frozen_rolled_forward"),
+    ], columns=["metric", "quarter", "value", "source"]))
+    con.execute("CREATE TABLE oot_validation AS SELECT * FROM oot")
+    con.register("stab", pd.DataFrame([
+        ("A", "2026q1", 0.05), ("B", "2026q1", 0.30),
+    ], columns=["series_id", "quarter", "flip_rate"]))
+    con.execute("CREATE TABLE full_label_stability AS SELECT * FROM stab")
+    con.register("rlog", pd.DataFrame([("2026q2", "2026-07-16T06:45:21+00:00")],
+                                      columns=["quarter", "refreshed_at"]))
+    con.execute("CREATE TABLE refresh_log AS SELECT * FROM rlog")
+    con.register("ff", pd.DataFrame([("A", "2026q2"), ("B", "2026q2")],
+                                    columns=["series_id", "quarter"]))
+    con.execute("CREATE TABLE funds_full AS SELECT * FROM ff")
+    yield con
+    con.close()

@@ -161,3 +161,214 @@ def build_fund_views(src: duckdb.DuckDBPyConnection) -> dict[str, pd.DataFrame]:
             "v_fund_peer_relative_ts": v_fund_peer_relative_ts,
             "v_fund_cluster_percentiles": v_fund_cluster_percentiles,
             "v_peer_display": v_peer_display, "v_top_holdings": v_top_holdings}
+
+
+HEALTH_RULES = {
+    "healthy": "Both of the last two realized quarters scored at or above the "
+               "mean-reversion baseline.",
+    "weak": "Above the 0.5 coin-flip in the last two realized quarters, but below the "
+            "mean-reversion baseline in at least one.",
+    "degraded": "At least one of the last two realized quarters scored below the 0.5 "
+                "coin-flip.",
+}
+
+
+def compute_health_state(last_two: list) -> tuple:
+    """(state, disclosed rule text) from [(auc, persistence_auc), ...] oldest-first."""
+    if any(auc < 0.5 for auc, _ in last_two):
+        return "degraded", HEALTH_RULES["degraded"]
+    if all(auc >= base for auc, base in last_two):
+        return "healthy", HEALTH_RULES["healthy"]
+    return "weak", HEALTH_RULES["weak"]
+
+
+def _prediction_intervals(src, cfg, forward: pd.DataFrame) -> pd.DataFrame:
+    """Per-tree 10th/90th percentile of the RF's forward predictions - a real spread, not
+    an invented CI. Needs cfg (model bundle + full_panel live only in the real DB); when
+    cfg is None (unit tests / missing bundle) the interval is NULL and the UI says so."""
+    out = forward[["series_id"]].copy()
+    out["ci_low"], out["ci_high"] = pd.NA, pd.NA
+    if cfg is None:
+        return out
+    try:
+        from fundspeers.io import load_model
+        import numpy as np
+        bundle = load_model("full_rf_model", cfg)
+        model, feature_cols = bundle["model"], bundle["feature_cols"]
+        panel = src.execute("SELECT * FROM full_panel WHERE quarter = ?",
+                            [forward["quarter"].iloc[0]]).df()
+        panel = panel.set_index("series_id").reindex(forward["series_id"])
+        x = panel.reindex(columns=feature_cols).fillna(0.0)
+        per_tree = np.stack([t.predict_proba(x.values)[:, 1] for t in model.estimators_])
+        out["ci_low"] = np.percentile(per_tree, 10, axis=0)
+        out["ci_high"] = np.percentile(per_tree, 90, axis=0)
+    except Exception as exc:  # interval is optional honesty garnish - never break the build
+        log.warning("prediction intervals unavailable (%s); shipping NULL intervals", exc)
+    return out
+
+
+def build_model_views(src: duckdb.DuckDBPyConnection, cfg) -> dict:
+    asof = latest_quarter(src)
+
+    forward = src.execute(
+        "SELECT series_id, quarter, predicted_probability FROM full_predictions "
+        "WHERE split = 'forward'").df()
+    target = f"the quarter after {forward['quarter'].iloc[0]}" if len(forward) else ""
+    stab = src.execute("""
+        SELECT series_id, flip_rate FROM (
+            SELECT series_id, flip_rate,
+                   row_number() OVER (PARTITION BY series_id ORDER BY quarter DESC) AS rk
+            FROM full_label_stability) WHERE rk = 1""").df()
+    intervals = _prediction_intervals(src, cfg, forward) if len(forward) else \
+        pd.DataFrame(columns=["series_id", "ci_low", "ci_high"])
+    v_fund_prediction_current = (forward.merge(intervals, on="series_id", how="left")
+                                 .merge(stab, on="series_id", how="left"))
+    v_fund_prediction_current["target_quarter"] = target
+
+    v_fund_prediction_history = src.execute(
+        "SELECT series_id, quarter, predicted_probability, actual_label, split "
+        "FROM full_predictions WHERE split IN ('test', 'train') ORDER BY series_id, quarter").df()
+
+    per_q = src.execute("""
+        SELECT e.quarter, e.value AS auc, b.value AS persistence_auc,
+               NULL AS n_scored, 'retrained' AS source
+        FROM full_model_eval e
+        LEFT JOIN full_model_eval b
+               ON b.quarter = e.quarter AND b.metric = 'auc_persistence_baseline'
+        WHERE e.metric = 'auc_pooled' AND e.quarter <> ''
+        UNION ALL
+        SELECT quarter, value AS auc, NULL, NULL, 'frozen' FROM oot_validation
+        WHERE metric = 'auc' AND quarter <> '' AND source = 'frozen_rolled_forward'
+        ORDER BY quarter
+    """).df()
+    v_model_health_quarters = per_q
+
+    retrained = per_q[per_q["source"] == "retrained"].sort_values("quarter")
+    last_two = [(float(r.auc), float(r.persistence_auc) if pd.notna(r.persistence_auc) else 0.5)
+                for r in retrained.tail(2).itertuples()]
+    state, rule_text = compute_health_state(last_two) if last_two else ("weak", "No realized quarters yet.")
+
+    def _scalar(table, metric, source=None):
+        q = f"SELECT value FROM {table} WHERE metric = ? AND quarter = ''"
+        args = [metric]
+        if source:
+            q += " AND source = ?"
+            args.append(source)
+        row = src.execute(q, args).fetchone()
+        return float(row[0]) if row else None
+
+    noise_floor = src.execute(
+        "SELECT avg(flip_rate) FROM full_label_stability").fetchone()[0]
+    refreshed = src.execute(
+        "SELECT max(refreshed_at) FROM refresh_log").fetchone()[0]
+    v_model_health_current = pd.DataFrame([{
+        "health_state": state, "rule_text": rule_text,
+        "last_scored_quarter": retrained["quarter"].max() if len(retrained) else None,
+        "auc_last": last_two[-1][0] if last_two else None,
+        "auc_prev": last_two[0][0] if len(last_two) > 1 else None,
+        "pooled_live_auc": _scalar("oot_validation", "auc", "published_forward"),
+        "backtest_auc": _scalar("full_model_eval", "auc_pooled"),
+        "base_rate": _scalar("oot_validation", "base_rate", "published_forward"),
+        "label_noise_floor": float(noise_floor) if noise_floor is not None else None,
+        "refreshed_at": refreshed,
+    }])
+
+    v_calibration_bins = src.execute("""
+        SELECT floor(predicted_probability * 10) / 10 AS bin_low,
+               floor(predicted_probability * 10) / 10 + 0.1 AS bin_high,
+               count(*) AS n, avg(predicted_probability) AS predicted_mean,
+               avg(actual_label) AS actual_lag_rate
+        FROM full_predictions WHERE split = 'test' AND actual_label IS NOT NULL
+        GROUP BY 1, 2 ORDER BY 1
+    """).df()
+
+    v_data_provenance = pd.DataFrame([{
+        "last_quarter": asof, "refreshed_at": refreshed,
+        "n_funds": int(src.execute(
+            "SELECT count(DISTINCT series_id) FROM funds_full").fetchone()[0]),
+    }])
+
+    return {"v_fund_prediction_current": v_fund_prediction_current,
+            "v_fund_prediction_history": v_fund_prediction_history,
+            "v_model_health_quarters": v_model_health_quarters,
+            "v_model_health_current": v_model_health_current,
+            "v_calibration_bins": v_calibration_bins,
+            "v_data_provenance": v_data_provenance}
+
+
+def build_cluster_views(src: duckdb.DuckDBPyConnection) -> dict:
+    """step15 consumers - built now so the extract schema is stable from day one."""
+    asof = latest_quarter(src)
+    v_cluster_summary = src.execute("""
+        SELECT cd.cluster_id, cd.short_title AS cluster_name, n.narrative,
+               cd.member_count, cd.dominant_category, cd.dominant_category_share,
+               cd.avg_volatility, cd.avg_sharpe
+        FROM cluster_definitions_full cd
+        LEFT JOIN dashboard_narratives n
+               ON n.cluster_id = cd.cluster_id AND n.quarter = cd.quarter
+        WHERE cd.quarter = ?
+    """, [asof]).df()
+    v_cluster_return_dispersion = src.execute("""
+        SELECT cluster_id, quarter,
+               quantile_cont(quarterly_return, 0.10) AS p10,
+               quantile_cont(quarterly_return, 0.25) AS p25,
+               quantile_cont(quarterly_return, 0.50) AS median,
+               quantile_cont(quarterly_return, 0.75) AS p75,
+               quantile_cont(quarterly_return, 0.90) AS p90,
+               count(*) AS n_members
+        FROM fund_metrics_quarterly_full WHERE cluster_id IS NOT NULL
+        GROUP BY cluster_id, quarter
+    """).df()
+    v_cluster_map = src.execute("""
+        SELECT c.series_id, c.x, c.y, c.cluster_id, h.ticker, h.series_name
+        FROM cluster_map_coords_full c
+        JOIN (SELECT series_id, ticker, series_name,
+                     row_number() OVER (PARTITION BY series_id ORDER BY quarter DESC) AS rk
+              FROM funds_full) h ON h.series_id = c.series_id AND h.rk = 1
+    """).df()
+    return {"v_cluster_summary": v_cluster_summary,
+            "v_cluster_return_dispersion": v_cluster_return_dispersion,
+            "v_cluster_map": v_cluster_map}
+
+
+def run(cfg: dict, out_path=None):
+    """Build all views from the real pipeline DB and write webapp/data/extract.duckdb."""
+    from pathlib import Path
+    from fundspeers.config import PROJECT_ROOT
+    from fundspeers.io import db_path
+
+    out_path = Path(out_path) if out_path else PROJECT_ROOT / "webapp" / "data" / "extract.duckdb"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if out_path.exists():
+        out_path.unlink()
+
+    src = duckdb.connect(str(db_path(cfg)), read_only=True)
+    try:
+        views = {}
+        views.update(build_fund_views(src))
+        views.update(build_model_views(src, cfg))
+        views.update(build_cluster_views(src))
+    finally:
+        src.close()
+
+    dst = duckdb.connect(str(out_path))
+    try:
+        for name, df in views.items():
+            dst.register("_v", df)
+            dst.execute(f"CREATE TABLE {name} AS SELECT * FROM _v")
+            dst.unregister("_v")
+            log.info("%s: %d rows", name, len(df))
+    finally:
+        dst.close()
+    size_mb = out_path.stat().st_size / 1e6
+    log.info("extract written: %s (%.1f MB)", out_path, size_mb)
+    if size_mb > 50:
+        raise RuntimeError(f"extract is {size_mb:.0f} MB - over the 50 MB budget")
+    return out_path
+
+
+if __name__ == "__main__":
+    from fundspeers.config import load_config
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    run(load_config())

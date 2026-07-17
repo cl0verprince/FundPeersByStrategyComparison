@@ -40,6 +40,7 @@ models/
 dist/
 build/
 out/
+webapp/data/*.duckdb
 
 # Personal reference docs (not part of the pipeline)
 DUCKDB_GUIDE.md
