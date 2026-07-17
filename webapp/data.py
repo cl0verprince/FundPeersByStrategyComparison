@@ -111,6 +111,12 @@ class ExtractStore:
     def calibration(self) -> pd.DataFrame:
         return self.con.execute("SELECT * FROM v_calibration_bins ORDER BY bin_low").df()
 
+    def forward_probabilities(self) -> pd.Series:
+        """The live, uncommitted-outcome probabilities in the current forward book."""
+        return self.con.execute(
+            "SELECT predicted_probability FROM v_fund_prediction_current"
+        ).df()["predicted_probability"]
+
     def provenance(self) -> dict:
         return dict(self._provenance)
 

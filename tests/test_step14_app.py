@@ -46,3 +46,17 @@ async def test_dead_fund_is_archive_not_error(user: User):
 async def test_unknown_ticker_offers_search(user: User):
     await user.open("/fund/ZZZZ")
     await user.should_see("No fund matches")
+
+
+async def test_model_page_leads_with_verdict_and_shows_coinflip(user: User):
+    await user.open("/model")
+    await user.should_see("Can you trust the lag-probability signal right now?")
+    await user.should_see("Signal degraded")
+    await user.should_see("coin flip")          # AUC explainer / markline caption
+    await user.should_see("The rule:")          # disclosed rule text
+
+
+async def test_methodology_has_disclaimer_and_survivorship(user: User):
+    await user.open("/methodology")
+    await user.should_see("not investment advice")
+    await user.should_see("Dead funds are included")
