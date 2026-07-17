@@ -17,7 +17,7 @@ from webapp.data import ExtractStore
 from webapp.pages.fund import render_fund
 from webapp.pages.methodology import render_methodology
 from webapp.pages.model import render_model
-from webapp.theme import DISCLAIMER
+from webapp.theme import DISCLAIMER, TOKENS
 
 
 @lru_cache(maxsize=1)
@@ -26,23 +26,29 @@ def get_store() -> ExtractStore:
 
 
 def omnibox(store) -> None:
-    results = ui.column().classes("absolute z-50 bg-white shadow rounded w-96 hidden")
+    t = TOKENS["light"]  # per-mode threading deferred; see module docstring
+    with ui.element("div").classes("relative"):
+        # Declared before the input so the on_change closure can reference it;
+        # absolute + top-full anchors it below the input regardless of DOM order.
+        results = ui.column().classes(
+            "absolute top-full left-0 mt-1 z-50 shadow rounded w-96 hidden"
+        ).style(f"background:{t['surface']}")
 
-    def on_change(e) -> None:
-        results.clear()
-        hits = store.search(e.value or "", limit=8)
-        results.classes(remove="hidden" if hits else None, add=None if hits else "hidden")
-        with results:
-            for h in hits:
-                tag = "" if h["is_active"] else f" (left universe {h['last_quarter']})"
-                ui.link(f"{h['ticker']}  {h['series_name']}{tag}",
-                        f"/fund/{h['ticker']}").classes(
-                    "px-3 py-1 text-sm no-underline" + ("" if h["is_active"] else " opacity-60"))
-            if not hits and (e.value or ""):
-                ui.label(f"No fund matches '{e.value}'.").classes("px-3 py-1 text-sm")
+        def on_change(e) -> None:
+            results.clear()
+            hits = store.search(e.value or "", limit=8)
+            results.classes(remove="hidden" if hits else None, add=None if hits else "hidden")
+            with results:
+                for h in hits:
+                    tag = "" if h["is_active"] else f" (left universe {h['last_quarter']})"
+                    ui.link(f"{h['ticker']}  {h['series_name']}{tag}",
+                            f"/fund/{h['ticker']}").classes(
+                        "px-3 py-1 text-sm no-underline" + ("" if h["is_active"] else " opacity-60"))
+                if not hits and (e.value or ""):
+                    ui.label(f"No fund matches '{e.value}'.").classes("px-3 py-1 text-sm")
 
-    box = ui.input(placeholder=f"Search {len(store.index)} funds by ticker or name…",
-                   on_change=on_change).props("dense outlined debounce=120").classes("w-96")
+        box = ui.input(placeholder=f"Search {len(store.index)} funds by ticker or name…",
+                       on_change=on_change).props("dense outlined debounce=120").classes("w-96")
     ui.keyboard(on_key=lambda e: box.run_method("focus")
                 if e.key == "k" and e.modifiers.ctrl and e.action.keydown else None)
 
@@ -62,9 +68,13 @@ def layout(store):
         honesty.freshness_stamp(store.provenance())
         ui.label(DISCLAIMER)
     if store.is_stale():
-        with ui.row().classes("w-full px-4 py-2 bg-yellow-100"):
+        t = TOKENS["light"]  # per-mode threading deferred; see module docstring
+        with ui.row().classes("w-full px-4 py-2 items-center gap-2").style(
+                f"background:{t['surface']}; border-left:4px solid {t['warning']}"):
+            ui.label("⚠").style(f"color:{t['warning']}")
             ui.label(f"This data ends {store.provenance()['last_quarter']} and a newer "
-                     "quarter should exist — the extract is stale.").classes("text-sm")
+                     "quarter should exist — the extract is stale."
+                     ).classes("text-sm").style(f"color:{t['warning']}")
     with ui.column().classes("w-full max-w-screen-xl mx-auto p-4") as content:
         yield content
 
