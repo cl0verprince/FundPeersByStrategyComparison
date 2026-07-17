@@ -37,3 +37,10 @@ def test_diverging_uses_polarity_colors():
     opt = diverging_delta_option("light", ["q1", "q2"], [0.01, -0.02])
     colors = [d["itemStyle"]["color"] for d in opt["series"][0]["data"]]
     assert colors == [TOKENS["light"]["div_pos"], TOKENS["light"]["div_neg"]]
+
+
+def test_status_has_retired_state():
+    from webapp.theme import STATUS, TOKENS
+    icon, label, token = STATUS["retired"]
+    assert (icon, label) == ("✕", "Signal retired")
+    assert token in TOKENS["light"] and token not in ("critical", "warning", "serious", "good")

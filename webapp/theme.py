@@ -20,6 +20,7 @@ STATUS = {
     "healthy": ("✓", "Signal live", "good"),
     "weak": ("◐", "Signal weak", "warning"),
     "degraded": ("⚠", "Signal degraded", "critical"),
+    "retired": ("✕", "Signal retired", "muted"),
 }
 DISCLAIMER = "Educational analytics — not investment advice."
 PROBABILITY_SENTENCE = "chance this fund falls below its peers' median return next quarter"

@@ -70,5 +70,18 @@ def probability_card(pred: dict, health: dict, reason: str = None,
                  ).classes("text-xs").style(f"color:{t['muted']}")
 
 
+def retirement_card(health: dict, mode: str = "light") -> None:
+    """The fund-page Zone A tile when the model is retired: a fact, not an alarm.
+    Never renders a probability or meter (design: no live probabilities anywhere)."""
+    t = TOKENS[mode]
+    with ui.card().classes("w-full max-w-sm p-4"):
+        ui.label(f"Model retired ({health.get('retired_as_of', '')})").classes(
+            "text-sm font-semibold")
+        ui.label(str(health.get("retirement_statement") or "")).classes(
+            "text-sm").style(f"color:{t['ink2']}")
+        ui.link("The full record →", "/model").classes("text-sm")
+        status_chip(health, mode)
+
+
 def _isna(v) -> bool:
     return v != v  # NaN check without importing pandas here
