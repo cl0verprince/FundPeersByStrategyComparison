@@ -578,6 +578,11 @@ function renderOOTPanel(s) {
     banner.appendChild(txt("p", "✕ MODEL RETIRED as of " + retirement.as_of,
       "oot-retired-head"));
     banner.appendChild(txt("p", retirement.statement));
+    banner.appendChild(txt("p",
+      "Two scorers, disclosed: the statement's trigger numbers are the deployed " +
+      "retrained model's per-quarter scores; the frozen-model strip below shows 0.428 " +
+      "and 0.418 for the same quarters. Both scorers were below the 0.5 coin-flip in " +
+      "both quarters."));
     card.appendChild(banner);
   }
   card.appendChild(txt("p", "Out-of-time reality check", "eyebrow"));

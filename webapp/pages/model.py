@@ -51,6 +51,12 @@ def render_model(store) -> None:
                 "reality every quarter; this record is what would justify — or refute — "
                 "this retirement."
             ).classes("text-sm text-gray-700 max-w-2xl")
+        ui.label(
+            "Two scorers, disclosed: the retirement statement's trigger numbers (0.457, "
+            "0.427) are the deployed retrained model's per-quarter scores; this standing "
+            "record grades the frozen step7 model, whose same-quarter scores were 0.428 "
+            "and 0.418. Both scorers were below the 0.5 coin-flip in both quarters."
+        ).classes("text-xs max-w-2xl").style(f"color:{t['ink2']}")
 
     ui.label("Realized AUC by quarter vs baselines").classes("text-lg font-semibold mt-4")
     dfq = store.model_quarters()
