@@ -43,8 +43,16 @@ coin-flip) and is designed to look right in that state first.
   (`python -m steps.step14_webapp.extract`). Wired into `advance.py` as part of the
   dashboard stage so every quarterly refresh rebuilds it. Deploy to the Space is a separate
   explicit command (`--deploy`), never automatic — same human-gate philosophy as `--push`.
-- **Hosting:** Hugging Face Space, Docker SDK, port 7860, public. No secrets (all data is
-  public SEC-derived). Quarterly update = rebuild extract + `hf upload` the Space.
+- **Hosting — REVISED at the gate (2026-07-17):** LOCAL-HOSTED for now
+  (`python -m webapp.main` → http://localhost:7860). The designed HF Space deploy hit a
+  policy change at first attempt: Docker/Gradio Spaces now require a PRO subscription
+  (~$9/mo) even on free hardware (HTTP 402). Free alternatives researched and recorded for
+  when hosting is wanted: **Koyeb** (recommended: free web service, 512 MB, no sleep, no
+  card, WebSockets — deploys from this GitHub repo with work dir `webapp`; requires
+  committing the ~10.5 MB extract instead of gitignoring it), **Render Hobby** ($0,
+  sleeps after 15 min, 5 GB/mo bandwidth), **Google Cloud Run** (most durable free tier,
+  needs a card on file). `webapp/Dockerfile` + `steps/step14_webapp/deploy.py` (HF) remain
+  ready; deploy stays a manual, human-gated action regardless of host.
 
 ## Extract data contract (precomputed views; grain → key columns)
 From the financial expert's spec — names are binding for implementation:
