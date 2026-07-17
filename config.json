@@ -44,6 +44,10 @@
       "n_estimators": 300,
       "max_depth": 8,
       "min_samples_leaf": 10
+    },
+    "retirement": {
+      "as_of": "2026q2",
+      "statement": "Retired after two consecutive realized quarters below the 0.5 coin-flip (0.457, 0.427) while the mean-reversion baseline inverted. The model had largely learned mean-reversion; when the market regime flipped to momentum in late 2025 the signal inverted. The frozen model continues to be scored against reality each quarter below - if that record shows sustained recovery, retirement will be revisited."
     }
   },
   "unified": {

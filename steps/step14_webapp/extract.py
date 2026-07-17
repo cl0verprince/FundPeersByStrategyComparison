@@ -210,6 +210,7 @@ def _prediction_intervals(src, cfg, forward: pd.DataFrame) -> pd.DataFrame:
 
 def build_model_views(src: duckdb.DuckDBPyConnection, cfg) -> dict:
     asof = latest_quarter(src)
+    retirement = (cfg or {}).get("model", {}).get("retirement") if isinstance(cfg, dict) else None
 
     forward = src.execute(
         "SELECT series_id, quarter, predicted_probability FROM full_predictions "
@@ -225,6 +226,8 @@ def build_model_views(src: duckdb.DuckDBPyConnection, cfg) -> dict:
     v_fund_prediction_current = (forward.merge(intervals, on="series_id", how="left")
                                  .merge(stab, on="series_id", how="left"))
     v_fund_prediction_current["target_quarter"] = target
+    if retirement:
+        v_fund_prediction_current = v_fund_prediction_current.iloc[0:0]
 
     v_fund_prediction_history = src.execute(
         "SELECT series_id, quarter, predicted_probability, actual_label, split "
@@ -274,6 +277,22 @@ def build_model_views(src: duckdb.DuckDBPyConnection, cfg) -> dict:
         "label_noise_floor": float(noise_floor) if noise_floor is not None else None,
         "refreshed_at": refreshed,
     }])
+    v_model_health_current["retired_as_of"] = retirement["as_of"] if retirement else pd.NA
+    v_model_health_current["retirement_statement"] = retirement["statement"] if retirement else pd.NA
+    if retirement:
+        v_model_health_current.loc[0, "health_state"] = "retired"
+        v_model_health_current.loc[0, "rule_text"] = retirement["statement"]
+
+    frozen_q = src.execute(
+        "SELECT quarter, value AS auc FROM oot_validation "
+        "WHERE metric = 'auc' AND quarter <> '' AND source = 'frozen_rolled_forward' "
+        "ORDER BY quarter").df()
+    if retirement:
+        rec = frozen_q[frozen_q["quarter"] > retirement["as_of"]].copy()
+    else:
+        rec = frozen_q.iloc[0:0].copy()
+    rec["n_rows"] = pd.NA
+    v_model_retirement_record = rec[["quarter", "auc", "n_rows"]]
 
     v_calibration_bins = src.execute("""
         SELECT floor(predicted_probability * 10) / 10 AS bin_low,
@@ -294,6 +313,7 @@ def build_model_views(src: duckdb.DuckDBPyConnection, cfg) -> dict:
             "v_fund_prediction_history": v_fund_prediction_history,
             "v_model_health_quarters": v_model_health_quarters,
             "v_model_health_current": v_model_health_current,
+            "v_model_retirement_record": v_model_retirement_record,
             "v_calibration_bins": v_calibration_bins,
             "v_data_provenance": v_data_provenance}
 

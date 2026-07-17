@@ -130,19 +130,24 @@ def make_synthetic_source(path) -> duckdb.DuckDBPyConnection:
     return con
 
 
-def build_synthetic_extract(out_path) -> Path:
+def build_synthetic_extract(out_path, retired=False) -> Path:
     """Build fund/model/cluster views from a fresh synthetic source and write them to
-    out_path exactly as steps.step14_webapp.extract.run does (cfg=None -> NULL intervals)."""
+    out_path exactly as steps.step14_webapp.extract.run does (cfg=None -> NULL intervals).
+
+    retired=True passes a minimal retired cfg into build_model_views (interval lookup
+    fails harmlessly -> NULL intervals, existing behavior)."""
     from steps.step14_webapp.extract import (
         build_cluster_views, build_fund_views, build_model_views, write_extract)
 
     out_path = Path(out_path)
     src_path = out_path.with_name(f"_src_{out_path.stem}.duckdb")
     con = make_synthetic_source(src_path)
+    cfg = {"model": {"retirement": {
+        "as_of": "2026q1", "statement": "Retired for the synthetic record."}}} if retired else None
     try:
         views = {}
         views.update(build_fund_views(con))
-        views.update(build_model_views(con, cfg=None))
+        views.update(build_model_views(con, cfg=cfg))
         views.update(build_cluster_views(con))
     finally:
         con.close()

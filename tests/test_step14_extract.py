@@ -95,3 +95,44 @@ def model_src(tmp_path):
     con = make_synthetic_source(tmp_path / "msrc.duckdb")
     yield con
     con.close()
+
+
+RETIRED_CFG = {"model": {"retirement": {
+    "as_of": "2026q1", "statement": "Retired for the synthetic record."}}}
+
+
+def test_retired_health_state_and_statement(model_src):
+    from steps.step14_webapp.extract import build_model_views
+    views = build_model_views(model_src, cfg=RETIRED_CFG)
+    cur = views["v_model_health_current"].iloc[0]
+    assert cur["health_state"] == "retired"
+    assert cur["retired_as_of"] == "2026q1"
+    assert cur["rule_text"] == "Retired for the synthetic record."
+    assert cur["retirement_statement"] == "Retired for the synthetic record."
+
+
+def test_retired_empties_live_forward_book(model_src):
+    from steps.step14_webapp.extract import build_model_views
+    views = build_model_views(model_src, cfg=RETIRED_CFG)
+    pred = views["v_fund_prediction_current"]
+    assert len(pred) == 0
+    assert "predicted_probability" in pred.columns  # schema stable
+
+
+def test_retirement_record_only_after_as_of(model_src):
+    from steps.step14_webapp.extract import build_model_views
+    views = build_model_views(model_src, cfg=RETIRED_CFG)
+    rec = views["v_model_retirement_record"]
+    # model_src fixture has one frozen per-quarter row at 2026q1 (== as_of, excluded)
+    assert list(rec.columns) == ["quarter", "auc", "n_rows"]
+    assert len(rec) == 0
+
+
+def test_not_retired_is_regression_free(model_src):
+    from steps.step14_webapp.extract import build_model_views
+    views = build_model_views(model_src, cfg=None)
+    cur = views["v_model_health_current"].iloc[0]
+    assert cur["health_state"] in ("healthy", "weak", "degraded")
+    assert pd.isna(cur["retired_as_of"])
+    assert len(views["v_fund_prediction_current"]) > 0
+    assert len(views["v_model_retirement_record"]) == 0
